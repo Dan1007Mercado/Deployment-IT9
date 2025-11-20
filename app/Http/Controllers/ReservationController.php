@@ -44,7 +44,53 @@ class ReservationController extends Controller
         $roomTypes = RoomType::all();
         return view('reservations.booking-wizard', compact('roomTypes'));
     }
-
+    // Add this method to your existing ReservationController
+// Add this method to your existing ReservationController
+public function getPaymentDetails(Reservation $reservation)
+{
+    try {
+        \Log::info('Payment details requested for reservation: ' . $reservation->reservation_id);
+        
+        // Eager load the relationships
+        $reservation->load(['guest', 'roomType', 'bookings.rooms.room']);
+        
+        // Get room numbers
+        $roomNumbers = [];
+        foreach($reservation->bookings as $booking) {
+            foreach($booking->rooms as $bookingRoom) {
+                $roomNumbers[] = $bookingRoom->room->room_number;
+            }
+        }
+        $roomNumbers = array_unique($roomNumbers);
+        
+        return response()->json([
+            'success' => true,
+            'reservation' => [
+                'reservation_id' => $reservation->reservation_id,
+                'guest' => [
+                    'first_name' => $reservation->guest->first_name,
+                    'last_name' => $reservation->guest->last_name,
+                    'email' => $reservation->guest->email,
+                    'contact_number' => $reservation->guest->contact_number,
+                ],
+                'check_in_date' => $reservation->check_in_date->format('M j, Y'),
+                'check_out_date' => $reservation->check_out_date->format('M j, Y'),
+                'nights' => $reservation->check_in_date->diffInDays($reservation->check_out_date),
+                'total_amount' => $reservation->total_amount,
+                'room_numbers' => implode(', ', $roomNumbers),
+            ]
+        ]);
+        
+    } catch (\Exception $e) {
+        \Log::error('Error in getPaymentDetails: ' . $e->getMessage());
+        \Log::error($e->getTraceAsString());
+        
+        return response()->json([
+            'success' => false,
+            'message' => 'Error loading reservation: ' . $e->getMessage()
+        ], 500);
+    }
+}
     // Get available rooms for selected dates and room type
     // Add this method to your ReservationController
     public function getAvailableRooms(Request $request)

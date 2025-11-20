@@ -108,15 +108,15 @@
                             </td>
                             <td class="px-6 py-4">
                                 <div class="flex space-x-2">
-                                    @if($reservation->status === 'pending')
-                                    <form action="{{ route('reservations.confirm', $reservation) }}" method="POST">
-                                        @csrf
-                                        <button type="submit" class="text-green-600 hover:text-green-900" title="Confirm">
-                                            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                                            </svg>
-                                        </button>
-                                    </form>
+                                @if($reservation->status === 'pending')
+                                    <button type="button" 
+                                            onclick="openPaymentModal({{ $reservation->reservation_id }})"
+                                            class="flex items-center w-full px-4 py-2 text-sm text-green-600 font-medium hover:bg-gray-100">
+                                        <svg class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                                        </svg>
+                                        Confirm & Process Payment
+                                    </button>
                                     @endif
                                     <a href="{{ route('reservations.edit', $reservation) }}" class="text-blue-600 hover:text-blue-900">
                                         <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -164,4 +164,5 @@
         </div>
     </main>
 </div>
+@include('components.payment-modal')
 @endsection

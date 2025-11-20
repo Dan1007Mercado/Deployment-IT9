@@ -155,10 +155,34 @@ Route::middleware(['auth', 'receptionist'])->group(function () {
         return view('settings');
     })->name('receptionist.settings');
 });
-
+// Payment routes
+// Payment routes - FIXED VERSION
+Route::prefix('payments')->group(function () {
+    Route::get('/reservations/{reservation}/payment-details', [ReservationController::class, 'getPaymentDetails']);
+    Route::post('/process-cash', [App\Http\Controllers\PaymentController::class, 'processCashPayment'])->name('payments.process-cash');
+    Route::post('/process-card', [App\Http\Controllers\PaymentController::class, 'processCardPayment'])->name('payments.process-card');
+});
 // =============================================================================
 // DEBUG ROUTES (Temporary - Remove in production)
 // =============================================================================
+// Temporary test route - add this to web.php
+Route::get('/test-payment-route', function() {
+    return response()->json([
+        'success' => true,
+        'message' => 'Route is working!'
+    ]);
+});
+// Add this to web.php for testing
+Route::get('/test-simple-json', function() {
+    return response()->json([
+        'success' => true,
+        'message' => 'Simple JSON test works!',
+        'data' => [
+            'test' => 'value',
+            'number' => 123
+        ]
+    ]);
+});
 Route::middleware('auth')->group(function () {
     Route::get('/debug-admin', function () {
         $user = auth()->user();

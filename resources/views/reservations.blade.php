@@ -271,18 +271,15 @@
                                                  class="hidden absolute right-0 mt-1 w-56 bg-white rounded-xl shadow-lg border border-gray-200 z-10 py-1">
                                                 <!-- Confirm Button (for pending) -->
                                                 @if($reservation->status === 'pending')
-                                                <form action="{{ route('reservations.confirm', $reservation) }}" method="POST" class="hover:bg-gray-100">
-                                                    @csrf
-                                                    <button type="submit" 
-                                                            class="flex items-center w-full px-4 py-2 text-sm text-green-600 font-medium">
+                                                    <button type="button" 
+                                                            onclick="openPaymentModal({{ $reservation->reservation_id }})"
+                                                            class="flex items-center w-full px-4 py-2 text-sm text-green-600 font-medium hover:bg-gray-100">
                                                         <svg class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
                                                         </svg>
-                                                        Confirm Reservation
+                                                        Confirm & Process Payment
                                                     </button>
-                                                </form>
-                                                <div class="border-t border-gray-200 my-1"></div>
-                                                @endif
+                                                    @endif
 
                                                 <a href="{{ route('reservations.edit', $reservation) }}" 
                                                    class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
@@ -513,4 +510,5 @@ document.addEventListener('DOMContentLoaded', function() {
     background: #94a3b8;
 }
 </style>
+@include('components.payment-modal')
 @endsection
