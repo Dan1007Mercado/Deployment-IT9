@@ -42,10 +42,7 @@ class AdminMiddleware
         }
 
         // Check if the user account is active
-        if (!$user->is_active) {
-            // Inactive account - deny access
-            abort(403, 'Your account has been deactivated. Please contact an administrator.');
-        }
+        
 
         // User is authenticated, has admin role, and is active
         // Allow the request to proceed

@@ -12,6 +12,7 @@
                         Dashboard
                     </a>
                 </li>
+                
                 <li>
                     <a href="/reservations" class="flex items-center px-3 py-2 rounded {{ Request::is('reservations') ? 'bg-[#1e3a5f] font-semibold' : 'hover:bg-[#1e3a5f]' }}">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">

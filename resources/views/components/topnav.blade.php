@@ -1,6 +1,11 @@
 <!-- Top Bar -->
 <div class="flex items-center justify-between px-8 py-6 border-b bg-white">
-    <h1 class="text-2xl font-semibold">{{ $title }}</h1>
+    <div>
+        <h1 class="text-2xl font-semibold">{{ $title }}</h1>
+        @if(isset($subtitle))
+        <p class="text-gray-500 mt-1">{{ $subtitle }}</p>
+        @endif
+    </div>
     <div class="flex items-center space-x-4">
         <!-- User Dropdown -->
         <div class="relative">

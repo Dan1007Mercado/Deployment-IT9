@@ -31,7 +31,9 @@ class AuthController extends Controller
             $user->update(['last_login_at' => now()]);
 
             // Redirect based on user role
-            if ($user->role === 'receptionist') {
+            if ($user->role === 'admin') {
+                return redirect()->intended('/dashboard');
+            } elseif ($user->role === 'receptionist') {
                 return redirect()->intended('/receptionist/dashboard');
             }
 
@@ -61,6 +63,7 @@ class AuthController extends Controller
             'name' => $data['name'],
             'email' => $data['email'],
             'password' => Hash::make($data['password']),
+            'role' => 'staff', // Default role for new registrations
         ]);
 
         Auth::login($user);
@@ -75,6 +78,6 @@ class AuthController extends Controller
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-    return redirect('/login');
+        return redirect('/login');
     }
 }
