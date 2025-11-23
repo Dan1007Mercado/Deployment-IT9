@@ -6,8 +6,8 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\UsersController;
 use App\Http\Controllers\ReservationController;
 use App\Http\Controllers\RoomsController;
-use App\Http\Controllers\GuestsController;
-use App\Http\Controllers\ReportsController;
+use App\Http\Controllers\TransactionController;
+use App\Http\Controllers\PaymentController;
 
 /*
 |--------------------------------------------------------------------------
@@ -40,11 +40,11 @@ Route::middleware('auth')->group(function () {
     // Dashboard Routes - Accessible to all authenticated users
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     
-    // Common pages for all authenticated users
-    Route::get('/guests', function () { 
-        return view('guests'); 
-    })->name('guests');
+    // Transactions/Guests Routes - Dynamic with controller
+    Route::get('/guests', [TransactionController::class, 'index'])->name('guests');
+    Route::get('/transactions', [TransactionController::class, 'index'])->name('transactions.index');
     
+    // Static pages for all authenticated users
     Route::get('/reports', function () { 
         return view('reports'); 
     })->name('reports');
@@ -63,9 +63,8 @@ Route::middleware('auth')->group(function () {
         Route::delete('/{reservation}', [ReservationController::class, 'destroy'])->name('reservations.destroy');
         Route::get('/{reservation}', [ReservationController::class, 'show'])->name('reservations.show');
         Route::post('/confirm/{reservation}', [ReservationController::class, 'confirm'])->name('reservations.confirm');
-        Route::get('/reservations/{reservation}', [ReservationController::class, 'show'])->name('reservations.show');
         
-        // AJAX routes for booking wizard - MOVED INSIDE AUTH
+        // AJAX routes for booking wizard
         Route::post('/available-rooms', [ReservationController::class, 'getAvailableRooms'])->name('reservations.available-rooms');
         Route::post('/hold-rooms', [ReservationController::class, 'holdRooms'])->name('reservations.hold-rooms');
         Route::post('/check-availability', [ReservationController::class, 'checkAvailability'])->name('reservations.check-availability');
@@ -81,109 +80,113 @@ Route::middleware('auth')->group(function () {
         Route::delete('/{room}', [RoomsController::class, 'destroy'])->name('rooms.destroy');
         Route::get('/{room}', [RoomsController::class, 'show'])->name('rooms.show');
     });
-});
 
-// =============================================================================
-// ADMIN-ONLY ROUTES - ADMIN CAN ACCESS EVERYTHING
-// =============================================================================
-Route::middleware(['auth', 'admin'])->group(function () {
-    // Employee Management - Admin only
-    Route::prefix('employee')->group(function () {
-        Route::get('/', [UsersController::class, 'index'])->name('users.index');
-        Route::post('/', [UsersController::class, 'store'])->name('users.store');
-        Route::put('/{user}', [UsersController::class, 'update'])->name('users.update');
-        Route::delete('/{user}', [UsersController::class, 'destroy'])->name('users.destroy');
+    // =========================================================================
+    // PAYMENT ROUTES - AUTHENTICATED USERS ONLY
+    // =========================================================================
+    Route::prefix('payments')->group(function () {
+        // Payment details
+        Route::get('/reservations/{reservation}/payment-details', [PaymentController::class, 'getPaymentDetails'])->name('payments.details');
+        
+        // Basic payment methods
+        Route::post('/process-cash', [PaymentController::class, 'processCashPayment'])->name('payments.process-cash');
+        Route::post('/process-card', [PaymentController::class, 'processCardPayment'])->name('payments.process-card');
+        
+        // Stripe Online Payment Routes
+        Route::post('/process-online', [PaymentController::class, 'processOnlinePayment'])->name('payments.process-online');
+        Route::get('/stripe/success', [PaymentController::class, 'stripeSuccess'])->name('payments.stripe.success');
+        Route::get('/stripe/cancel', [PaymentController::class, 'stripeCancel'])->name('payments.stripe.cancel');
+        Route::get('/qrcode', [PaymentController::class, 'getPaymentQRCode'])->name('payments.qrcode');
+        Route::get('/check-status', [PaymentController::class, 'checkPaymentStatus'])->name('payments.check-status');
+        
+        // Stripe Webhook (exclude CSRF protection)
+        Route::post('/stripe/webhook', [PaymentController::class, 'handleWebhook'])->withoutMiddleware(['csrf']);
     });
 
-    // Admin can also access all receptionist routes with admin prefix
-    Route::prefix('admin')->group(function () {
-        Route::get('/receptionist/dashboard', [DashboardController::class, 'index'])->name('admin.receptionist.dashboard');
-        Route::get('/receptionist/reservations', [ReservationController::class, 'index'])->name('admin.receptionist.reservations');
-        Route::get('/receptionist/rooms', [RoomsController::class, 'index'])->name('admin.receptionist.rooms');
-        Route::get('/receptionist/guests', function () { 
-            return view('guests'); 
-        })->name('admin.receptionist.guests');
-        Route::get('/receptionist/reports', function () { 
-            return view('reports'); 
-        })->name('admin.receptionist.reports');
-        Route::get('/receptionist/settings', function () { 
-            return view('settings'); 
-        })->name('admin.receptionist.settings');
-    });
-});
+    // =============================================================================
+    // ADMIN-ONLY ROUTES - ADMIN CAN ACCESS EVERYTHING
+    // =============================================================================
+    Route::middleware(['auth', 'admin'])->group(function () {
+        // Employee Management - Admin only
+        Route::prefix('employee')->group(function () {
+            Route::get('/', [UsersController::class, 'index'])->name('users.index');
+            Route::post('/', [UsersController::class, 'store'])->name('users.store');
+            Route::put('/{user}', [UsersController::class, 'update'])->name('users.update');
+            Route::delete('/{user}', [UsersController::class, 'destroy'])->name('users.destroy');
+        });
 
-// =============================================================================
-// RECEPTIONIST-ONLY ROUTES
-// =============================================================================
-Route::middleware(['auth', 'receptionist'])->group(function () {
-    // Receptionist Dashboard
-    Route::get('/receptionist/dashboard', [DashboardController::class, 'index'])->name('receptionist.dashboard');
-
-    // Receptionist Reservations
-    Route::prefix('receptionist/reservations')->group(function () {
-        Route::get('/', [ReservationController::class, 'index'])->name('receptionist.reservations');
-        Route::get('/create', [ReservationController::class, 'create'])->name('receptionist.reservations.create');
-        Route::post('/', [ReservationController::class, 'store'])->name('receptionist.reservations.store');
-        Route::get('/{reservation}/edit', [ReservationController::class, 'edit'])->name('receptionist.reservations.edit');
-        Route::put('/{reservation}', [ReservationController::class, 'update'])->name('receptionist.reservations.update');
-        Route::delete('/{reservation}', [ReservationController::class, 'destroy'])->name('receptionist.reservations.destroy');
-        Route::get('/{reservation}', [ReservationController::class, 'show'])->name('receptionist.reservations.show');
-        Route::post('/confirm/{reservation}', [ReservationController::class, 'confirm'])->name('receptionist.reservations.confirm');
+        // Admin can also access all receptionist routes with admin prefix
+        Route::prefix('admin')->group(function () {
+            Route::get('/receptionist/dashboard', [DashboardController::class, 'index'])->name('admin.receptionist.dashboard');
+            Route::get('/receptionist/reservations', [ReservationController::class, 'index'])->name('admin.receptionist.reservations');
+            Route::get('/receptionist/rooms', [RoomsController::class, 'index'])->name('admin.receptionist.rooms');
+            Route::get('/receptionist/guests', [TransactionController::class, 'index'])->name('admin.receptionist.guests');
+            Route::get('/receptionist/reports', function () { 
+                return view('reports'); 
+            })->name('admin.receptionist.reports');
+            Route::get('/receptionist/settings', function () { 
+                return view('settings'); 
+            })->name('admin.receptionist.settings');
+        });
     });
 
-    // Receptionist Rooms
-    Route::prefix('receptionist/rooms')->group(function () {
-        Route::get('/', [RoomsController::class, 'index'])->name('receptionist.rooms');
-        Route::get('/create', [RoomsController::class, 'create'])->name('receptionist.rooms.create');
-        Route::post('/', [RoomsController::class, 'store'])->name('receptionist.rooms.store');
-        Route::get('/{room}/edit', [RoomsController::class, 'edit'])->name('receptionist.rooms.edit');
-        Route::put('/{room}', [RoomsController::class, 'update'])->name('receptionist.rooms.update');
-        Route::delete('/{room}', [RoomsController::class, 'destroy'])->name('receptionist.rooms.destroy');
-        Route::get('/{room}', [RoomsController::class, 'show'])->name('receptionist.rooms.show');
+    // =============================================================================
+    // RECEPTIONIST-ONLY ROUTES
+    // =============================================================================
+    Route::middleware(['auth', 'receptionist'])->group(function () {
+        // Receptionist Dashboard
+        Route::get('/receptionist/dashboard', [DashboardController::class, 'index'])->name('receptionist.dashboard');
+
+        // Receptionist Reservations
+        Route::prefix('receptionist/reservations')->group(function () {
+            Route::get('/', [ReservationController::class, 'index'])->name('receptionist.reservations');
+            Route::get('/create', [ReservationController::class, 'create'])->name('receptionist.reservations.create');
+            Route::post('/', [ReservationController::class, 'store'])->name('receptionist.reservations.store');
+            Route::get('/{reservation}/edit', [ReservationController::class, 'edit'])->name('receptionist.reservations.edit');
+            Route::put('/{reservation}', [ReservationController::class, 'update'])->name('receptionist.reservations.update');
+            Route::delete('/{reservation}', [ReservationController::class, 'destroy'])->name('receptionist.reservations.destroy');
+            Route::get('/{reservation}', [ReservationController::class, 'show'])->name('receptionist.reservations.show');
+            Route::post('/confirm/{reservation}', [ReservationController::class, 'confirm'])->name('receptionist.reservations.confirm');
+        });
+
+        // Receptionist Rooms
+        Route::prefix('receptionist/rooms')->group(function () {
+            Route::get('/', [RoomsController::class, 'index'])->name('receptionist.rooms');
+            Route::get('/create', [RoomsController::class, 'create'])->name('receptionist.rooms.create');
+            Route::post('/', [RoomsController::class, 'store'])->name('receptionist.rooms.store');
+            Route::get('/{room}/edit', [RoomsController::class, 'edit'])->name('receptionist.rooms.edit');
+            Route::put('/{room}', [RoomsController::class, 'update'])->name('receptionist.rooms.update');
+            Route::delete('/{room}', [RoomsController::class, 'destroy'])->name('receptionist.rooms.destroy');
+            Route::get('/{room}', [RoomsController::class, 'show'])->name('receptionist.rooms.show');
+        });
+
+        // Receptionist other pages
+        Route::get('/receptionist/guests', [TransactionController::class, 'index'])->name('receptionist.guests');
+        Route::get('/receptionist/reports', function () { return view('reports'); })->name('receptionist.reports');
+        Route::get('/receptionist/settings', function () { return view('settings'); })->name('receptionist.settings');
     });
 
-    // Receptionist other pages
-    Route::get('/receptionist/guests', function () {
-        return view('guests');
-    })->name('receptionist.guests');
-    
-    Route::get('/receptionist/reports', function () {
-        return view('reports');
-    })->name('receptionist.reports');
-    
-    Route::get('/receptionist/settings', function () {
-        return view('settings');
-    })->name('receptionist.settings');
-});
-// Payment routes
-// Payment routes - FIXED VERSION
-Route::prefix('payments')->group(function () {
-    Route::get('/reservations/{reservation}/payment-details', [ReservationController::class, 'getPaymentDetails']);
-    Route::post('/process-cash', [App\Http\Controllers\PaymentController::class, 'processCashPayment'])->name('payments.process-cash');
-    Route::post('/process-card', [App\Http\Controllers\PaymentController::class, 'processCardPayment'])->name('payments.process-card');
-});
-// =============================================================================
-// DEBUG ROUTES (Temporary - Remove in production)
-// =============================================================================
-// Temporary test route - add this to web.php
-Route::get('/test-payment-route', function() {
-    return response()->json([
-        'success' => true,
-        'message' => 'Route is working!'
-    ]);
-});
-// Add this to web.php for testing
-Route::get('/test-simple-json', function() {
-    return response()->json([
-        'success' => true,
-        'message' => 'Simple JSON test works!',
-        'data' => [
-            'test' => 'value',
-            'number' => 123
-        ]
-    ]);
-});
-Route::middleware('auth')->group(function () {
+    // =============================================================================
+    // DEBUG ROUTES (Temporary - Remove in production)
+    // =============================================================================
+    Route::get('/test-payment-route', function() {
+        return response()->json([
+            'success' => true,
+            'message' => 'Route is working!'
+        ]);
+    });
+
+    Route::get('/test-simple-json', function() {
+        return response()->json([
+            'success' => true,
+            'message' => 'Simple JSON test works!',
+            'data' => [
+                'test' => 'value',
+                'number' => 123
+            ]
+        ]);
+    });
+
     Route::get('/debug-admin', function () {
         $user = auth()->user();
         
