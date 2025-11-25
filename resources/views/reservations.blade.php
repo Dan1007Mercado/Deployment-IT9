@@ -128,6 +128,7 @@
                             <div class="flex items-center space-x-2">
                                 <span class="text-sm text-gray-600">Show</span>
                                 <select id="per-page-filter" class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                                    <option value="10" {{ request('per_page', 10) == 10 ? 'selected' : '' }}>10</option>
                                     <option value="15" {{ request('per_page', 15) == 15 ? 'selected' : '' }}>15</option>
                                     <option value="25" {{ request('per_page') == 25 ? 'selected' : '' }}>25</option>
                                     <option value="50" {{ request('per_page') == 50 ? 'selected' : '' }}>50</option>
@@ -362,7 +363,7 @@
                                 Previous
                             </span>
                             @else
-                            <a href="{{ $reservations->previousPageUrl() }}&per_page={{ request('per_page', 15) }}{{ request('search') ? '&search=' . request('search') : '' }}" 
+                            <a href="{{ $reservations->previousPageUrl() }}&per_page={{ request('per_page', 10) }}{{ request('search') ? '&search=' . request('search') : '' }}" 
                                class="px-3 py-1.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors text-sm">
                                 Previous
                             </a>
@@ -376,7 +377,7 @@
                                         {{ $page }}
                                     </span>
                                     @else
-                                    <a href="{{ $url }}&per_page={{ request('per_page', 15) }}{{ request('search') ? '&search=' . request('search') : '' }}" 
+                                    <a href="{{ $url }}&per_page={{ request('per_page', 10) }}{{ request('search') ? '&search=' . request('search') : '' }}" 
                                        class="px-3 py-1.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors text-sm">
                                         {{ $page }}
                                     </a>
@@ -386,7 +387,7 @@
 
                             <!-- Next Button -->
                             @if($reservations->hasMorePages())
-                            <a href="{{ $reservations->nextPageUrl() }}&per_page={{ request('per_page', 15) }}{{ request('search') ? '&search=' . request('search') : '' }}" 
+                            <a href="{{ $reservations->nextPageUrl() }}&per_page={{ request('per_page', 10) }}{{ request('search') ? '&search=' . request('search') : '' }}" 
                                class="px-3 py-1.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors text-sm">
                                 Next
                             </a>
@@ -402,6 +403,7 @@
                         <div class="flex items-center space-x-2">
                             <span class="text-sm text-gray-600">Show</span>
                             <select id="per-page-filter-bottom" class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                                <option value="10" {{ request('per_page', 10) == 10 ? 'selected' : '' }}>10</option>
                                 <option value="15" {{ request('per_page', 15) == 15 ? 'selected' : '' }}>15</option>
                                 <option value="25" {{ request('per_page') == 25 ? 'selected' : '' }}>25</option>
                                 <option value="50" {{ request('per_page') == 50 ? 'selected' : '' }}>50</option>

@@ -68,6 +68,7 @@ Route::middleware('auth')->group(function () {
         Route::post('/available-rooms', [ReservationController::class, 'getAvailableRooms'])->name('reservations.available-rooms');
         Route::post('/hold-rooms', [ReservationController::class, 'holdRooms'])->name('reservations.hold-rooms');
         Route::post('/check-availability', [ReservationController::class, 'checkAvailability'])->name('reservations.check-availability');
+        Route::get('/bookings', [BookingController::class, 'index'])->name('bookings.index');
     });
     
     // Rooms - Accessible to all authenticated users

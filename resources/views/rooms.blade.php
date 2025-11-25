@@ -6,7 +6,10 @@
 
     <!-- Main Content -->
     <main class="flex-1 bg-[#f8fafc]">
-        @include('components.topnav', ['title' => 'Room Management'])
+    @include('components.topnav', [
+    'title' => 'Room Management',
+    'subtitle' => 'Manage hotel rooms and view room status '
+    ])
 
         <!-- Add/Edit Room Modal -->
         <div id="roomModal" class="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 hidden">
@@ -68,10 +71,7 @@
 
         <!-- Rooms Content -->
         <div class="px-8 py-6">
-            <div class="mb-6">
-                <h2 class="text-xl font-semibold mb-2">Room Management</h2>
-                <p class="text-gray-500 text-sm">Manage hotel rooms and view room status</p>
-            </div>
+            
 
             <!-- Controls -->
             <div class="flex items-center justify-between mb-6">
@@ -98,7 +98,7 @@
                 <div class="bg-white rounded-lg shadow p-4 border-l-4 border-green-500">
                     <div class="flex items-center justify-between">
                         <div>
-                            <p class="text-sm text-gray-600">Available Rooms</p>
+                            <p class="text-sm text-gray-600">All Rooms</p>
                             <p class="text-2xl font-bold">{{ $rooms->where('room_status', 'available')->count() }}</p>
                         </div>
                         <div class="p-2 bg-green-100 rounded-lg">
@@ -108,19 +108,7 @@
                         </div>
                     </div>
                 </div>
-                <div class="bg-white rounded-lg shadow p-4 border-l-4 border-red-500">
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <p class="text-sm text-gray-600">Occupied Rooms</p>
-                            <p class="text-2xl font-bold">{{ $rooms->where('room_status', 'occupied')->count() }}</p>
-                        </div>
-                        <div class="p-2 bg-red-100 rounded-lg">
-                            <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                            </svg>
-                        </div>
-                    </div>
-                </div>
+                
             </div>
 
             <!-- Room Cards -->
@@ -130,9 +118,7 @@
                     <div class="relative">
                         <img src="{{ $room->image_path ? Storage::url($room->image_path) : 'https://images.unsplash.com/photo-1611892440504-42a792e24d32?w=300&h=150&fit=crop' }}" 
                              alt="Room {{ $room->room_number }}" class="w-full h-32 object-cover">
-                        <span class="absolute top-2 right-2 {{ $room->room_status == 'available' ? 'bg-green-500' : 'bg-red-500' }} text-white text-xs px-2 py-1 rounded-full capitalize">
-                            {{ $room->room_status }}
-                        </span>
+                        
                     </div>
                     <div class="p-3">
                         <div class="flex items-start justify-between mb-2">

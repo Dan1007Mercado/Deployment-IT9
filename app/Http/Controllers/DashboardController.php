@@ -6,8 +6,10 @@ use App\Models\Reservation;
 use App\Models\Room;
 use App\Models\Payment;
 use App\Models\Guest;
+use App\Models\Booking;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 
 class DashboardController extends Controller
 {
@@ -17,12 +19,32 @@ class DashboardController extends Controller
         $startDate = $request->get('start_date', now()->startOfMonth()->format('Y-m-d'));
         $endDate = $request->get('end_date', now()->endOfMonth()->format('Y-m-d'));
 
-        // Basic stats
+        // DEBUG: Check what's happening with the data
+        $today = Carbon::today()->toDateString();
+        
+        // Method 1: Raw SQL (we know this works)
+        $rawCheckins = DB::select("SELECT COUNT(*) as count FROM bookings WHERE DATE(actual_check_in) = CURDATE()")[0]->count;
+        $rawCheckouts = DB::select("SELECT COUNT(*) as count FROM bookings WHERE DATE(actual_check_out) = CURDATE()")[0]->count;
+        
+        // Method 2: Eloquent (for comparison)
+        $eloquentCheckins = Booking::whereDate('actual_check_in', $today)->count();
+        $eloquentCheckouts = Booking::whereDate('actual_check_out', $today)->count();
+        
+        // Log the differences for debugging
+        \Log::info('Dashboard Counts Comparison:', [
+            'today_date' => $today,
+            'raw_sql_checkins' => $rawCheckins,
+            'eloquent_checkins' => $eloquentCheckins,
+            'raw_sql_checkouts' => $rawCheckouts,
+            'eloquent_checkouts' => $eloquentCheckouts,
+        ]);
+
+        // Use the raw SQL counts since we know they work
         $stats = [
             'available_rooms' => Room::where('room_status', 'available')->count(),
             'occupied_rooms' => Room::where('room_status', 'occupied')->count(),
-            'today_checkins' => Reservation::whereDate('check_in_date', today())->count(),
-            'today_checkouts' => Reservation::whereDate('check_out_date', today())->count(),
+            'today_checkins' => $rawCheckins,
+            'today_checkouts' => $rawCheckouts,
             'total_guests' => Guest::count(),
             'total_reservations' => Reservation::count(),
         ];
@@ -33,8 +55,7 @@ class DashboardController extends Controller
         // Recent reservations for table
         $recentReservations = Reservation::with(['guest', 'roomType'])
             ->orderBy('created_at', 'desc')
-            ->limit(10)
-            ->get();
+            ->paginate(10);
 
         return view('dashboard', array_merge($stats, $revenueData, [
             'recent_reservations' => $recentReservations,

@@ -310,8 +310,7 @@ public function getPaymentDetails(Reservation $reservation)
 
         DB::commit();
 
-        return redirect()->route('reservations.index')
-            ->with('success', 'Reservation updated successfully!');
+        return redirect()->route('reservations.edit', $reservation)->with('success', 'Reservation updated successfully!');
 
     } catch (\Exception $e) {
         DB::rollBack();
