@@ -1,6 +1,8 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\UsersController;
@@ -8,6 +10,7 @@ use App\Http\Controllers\ReservationController;
 use App\Http\Controllers\RoomsController;
 use App\Http\Controllers\TransactionController;
 use App\Http\Controllers\PaymentController;
+use App\Http\Controllers\ReportController;
 
 /*
 |--------------------------------------------------------------------------
@@ -33,6 +36,30 @@ Route::post('/register', [AuthController::class, 'register'])->name('register.po
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
 // =============================================================================
+// GMAIL OAUTH CALLBACK ROUTE (PUBLIC - No auth required)
+// =============================================================================
+Route::get('/oauth2callback', function (Request $request) {
+    try {
+        $code = $request->get('code');
+        
+        if (!$code) {
+            Log::error('Gmail OAuth callback received without authorization code');
+            return redirect('/settings')->with('error', 'Authentication failed: No authorization code received');
+        }
+
+        $gmailService = new \App\Services\GmailService();
+        $gmailService->setAuthCode($code);
+        
+        Log::info('Gmail OAuth authentication completed successfully');
+        return redirect('/settings')->with('success', 'Gmail API successfully authenticated! You can now send emails.');
+        
+    } catch (\Exception $e) {
+        Log::error('Gmail OAuth callback error: ' . $e->getMessage());
+        return redirect('/settings')->with('error', 'Authentication failed: ' . $e->getMessage());
+    }
+})->name('gmail.callback');
+
+// =============================================================================
 // PROTECTED ROUTES - AUTHENTICATED USERS ONLY
 // =============================================================================
 Route::middleware('auth')->group(function () {
@@ -44,17 +71,29 @@ Route::middleware('auth')->group(function () {
     Route::get('/guests', [TransactionController::class, 'index'])->name('guests');
     Route::get('/transactions', [TransactionController::class, 'index'])->name('transactions.index');
     
-    // Static pages for all authenticated users
-    Route::get('/reports', function () { 
-        return view('reports'); 
-    })->name('reports');
+    // Reports Routes - Dynamic with controller
+    Route::get('/report', [ReportController::class, 'index'])->name('report');
+    Route::post('/report/generate', [ReportController::class, 'generate'])->name('report.generate');
+    Route::get('/report/download/{id}', [ReportController::class, 'download'])->name('report.download');
     
+    // Settings - Static page
     Route::get('/settings', function () { 
         return view('settings'); 
     })->name('settings');
     
     // Reservations - Accessible to all authenticated users
     Route::prefix('reservations')->group(function () {
+        // IMAGE ROUTE - ADD THIS
+        Route::get('/room-images/{filename}', function ($filename) {
+            $path = storage_path('app/public/room-images/' . $filename);
+            
+            if (!file_exists($path)) {
+                abort(404);
+            }
+            
+            return response()->file($path);
+        })->name('reservations.room-images');
+        
         Route::get('/', [ReservationController::class, 'index'])->name('reservations.index');
         Route::get('/create', [ReservationController::class, 'create'])->name('reservations.create');
         Route::post('/', [ReservationController::class, 'store'])->name('reservations.store');
@@ -68,7 +107,12 @@ Route::middleware('auth')->group(function () {
         Route::post('/available-rooms', [ReservationController::class, 'getAvailableRooms'])->name('reservations.available-rooms');
         Route::post('/hold-rooms', [ReservationController::class, 'holdRooms'])->name('reservations.hold-rooms');
         Route::post('/check-availability', [ReservationController::class, 'checkAvailability'])->name('reservations.check-availability');
-        Route::get('/bookings', [BookingController::class, 'index'])->name('bookings.index');
+        
+        // Simple bookings route that redirects to reservations
+        Route::get('/bookings', function (Request $request) {
+            $checkInDate = $request->get('check_in_date', today()->format('Y-m-d'));
+            return redirect()->route('reservations.index', ['check_in_date' => $checkInDate]);
+        })->name('bookings.index');
     });
     
     // Rooms - Accessible to all authenticated users
@@ -122,9 +166,7 @@ Route::middleware('auth')->group(function () {
             Route::get('/receptionist/reservations', [ReservationController::class, 'index'])->name('admin.receptionist.reservations');
             Route::get('/receptionist/rooms', [RoomsController::class, 'index'])->name('admin.receptionist.rooms');
             Route::get('/receptionist/guests', [TransactionController::class, 'index'])->name('admin.receptionist.guests');
-            Route::get('/receptionist/reports', function () { 
-                return view('reports'); 
-            })->name('admin.receptionist.reports');
+            Route::get('/receptionist/report', [ReportController::class, 'index'])->name('admin.receptionist.report');
             Route::get('/receptionist/settings', function () { 
                 return view('settings'); 
             })->name('admin.receptionist.settings');
@@ -140,6 +182,17 @@ Route::middleware('auth')->group(function () {
 
         // Receptionist Reservations
         Route::prefix('receptionist/reservations')->group(function () {
+            // IMAGE ROUTE FOR RECEPTIONIST TOO
+            Route::get('/room-images/{filename}', function ($filename) {
+                $path = storage_path('app/public/room-images/' . $filename);
+                
+                if (!file_exists($path)) {
+                    abort(404);
+                }
+                
+                return response()->file($path);
+            })->name('receptionist.reservations.room-images');
+            
             Route::get('/', [ReservationController::class, 'index'])->name('receptionist.reservations');
             Route::get('/create', [ReservationController::class, 'create'])->name('receptionist.reservations.create');
             Route::post('/', [ReservationController::class, 'store'])->name('receptionist.reservations.store');
@@ -148,6 +201,17 @@ Route::middleware('auth')->group(function () {
             Route::delete('/{reservation}', [ReservationController::class, 'destroy'])->name('receptionist.reservations.destroy');
             Route::get('/{reservation}', [ReservationController::class, 'show'])->name('receptionist.reservations.show');
             Route::post('/confirm/{reservation}', [ReservationController::class, 'confirm'])->name('receptionist.reservations.confirm');
+            
+            // AJAX routes for receptionist booking wizard
+            Route::post('/available-rooms', [ReservationController::class, 'getAvailableRooms'])->name('receptionist.reservations.available-rooms');
+            Route::post('/hold-rooms', [ReservationController::class, 'holdRooms'])->name('receptionist.reservations.hold-rooms');
+            Route::post('/check-availability', [ReservationController::class, 'checkAvailability'])->name('receptionist.reservations.check-availability');
+            
+            // Simple bookings route for receptionist
+            Route::get('/bookings', function (Request $request) {
+                $checkInDate = $request->get('check_in_date', today()->format('Y-m-d'));
+                return redirect()->route('receptionist.reservations', ['check_in_date' => $checkInDate]);
+            })->name('receptionist.bookings.index');
         });
 
         // Receptionist Rooms
@@ -163,7 +227,7 @@ Route::middleware('auth')->group(function () {
 
         // Receptionist other pages
         Route::get('/receptionist/guests', [TransactionController::class, 'index'])->name('receptionist.guests');
-        Route::get('/receptionist/reports', function () { return view('reports'); })->name('receptionist.reports');
+        Route::get('/receptionist/report', [ReportController::class, 'index'])->name('receptionist.report');
         Route::get('/receptionist/settings', function () { return view('settings'); })->name('receptionist.settings');
     });
 
@@ -187,6 +251,7 @@ Route::middleware('auth')->group(function () {
             ]
         ]);
     });
+    
 
     Route::get('/debug-admin', function () {
         $user = auth()->user();

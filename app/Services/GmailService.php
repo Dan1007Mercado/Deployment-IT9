@@ -13,6 +13,7 @@ class GmailService
 {
     protected $client;
     protected $service;
+    protected $isAuthenticated = false;
 
     public function __construct()
     {
@@ -22,28 +23,35 @@ class GmailService
         $this->client->setAuthConfig(storage_path('app/credentials.json'));
         $this->client->setAccessType('offline');
         $this->client->setPrompt('select_account consent');
+        $this->client->setRedirectUri(url('http://localhost:8000/oauth2callback'));
 
-        // Load or get new token
-        $this->setAccessToken();
-
-        $this->service = new Google_Service_Gmail($this->client);
+        try {
+            // Load or get new token
+            $this->setAccessToken();
+            $this->isAuthenticated = true;
+            $this->service = new Google_Service_Gmail($this->client);
+        } catch (\Exception $e) {
+            Log::warning('GmailService not authenticated: ' . $e->getMessage());
+            $this->isAuthenticated = false;
+        }
     }
 
     private function setAccessToken()
     {
         $tokenPath = storage_path('app/gmail-token.json');
         
-        if (file_exists($tokenPath)) {
-            $accessToken = json_decode(file_get_contents($tokenPath), true);
-            $this->client->setAccessToken($accessToken);
+        if (!file_exists($tokenPath)) {
+            throw new \Exception('Gmail token not found. Please run php artisan gmail:setup');
         }
+
+        $accessToken = json_decode(file_get_contents($tokenPath), true);
+        $this->client->setAccessToken($accessToken);
 
         // If token is expired, refresh it
         if ($this->client->isAccessTokenExpired()) {
             if ($this->client->getRefreshToken()) {
-                $this->client->fetchAccessTokenWithRefreshToken($this->client->getRefreshToken());
+                $accessToken = $this->client->fetchAccessTokenWithRefreshToken($this->client->getRefreshToken());
             } else {
-                // You might want to handle this case differently
                 throw new \Exception('Refresh token is missing. Please re-authenticate.');
             }
             
@@ -55,398 +63,102 @@ class GmailService
         }
     }
 
+    public function isAuthenticated()
+    {
+        return $this->isAuthenticated;
+    }
+
+    // ADD THIS METHOD - Payment Confirmation Email (FIXED NAME)
+    public function sendPaymentConfirmedEmail($reservation, $guest, $payment)
+    {
+        if (!$this->isAuthenticated) {
+            Log::warning('GmailService not authenticated - email not sent for payment confirmation');
+            return false;
+        }
+
+        try {
+            $subject = "Payment Confirmed - Booking Complete - AzureHotel";
+            $message = $this->createPaymentConfirmedTemplate($reservation, $guest, $payment);
+            return $this->sendEmail($guest->email, $subject, $message);
+        } catch (\Exception $e) {
+            Log::error('Failed to send payment confirmed email: ' . $e->getMessage());
+            return false;
+        }
+    }
+
     public function sendReservationCreatedEmail($reservation, $guest)
     {
-        $subject = "Reservation Created - Confirmation Required - Grand Paradise Hotel";
-        
-        $message = $this->createReservationCreatedTemplate($reservation, $guest);
-        
-        return $this->sendEmail($guest->email, $subject, $message);
+        if (!$this->isAuthenticated) {
+            Log::warning('GmailService not authenticated - email not sent for reservation creation');
+            return false;
+        }
+
+        try {
+            $subject = "Reservation Created - Confirmation Required - AzureHotel";
+            $message = $this->createReservationCreatedTemplate($reservation, $guest);
+            return $this->sendEmail($guest->email, $subject, $message);
+        } catch (\Exception $e) {
+            Log::error('Failed to send reservation created email: ' . $e->getMessage());
+            return false;
+        }
     }
 
     public function sendReservationConfirmedEmail($reservation, $guest, $payment = null)
     {
-        $subject = "Reservation Confirmed - Booking Complete - Grand Paradise Hotel";
-        
-        $message = $this->createReservationConfirmedTemplate($reservation, $guest, $payment);
-        
-        return $this->sendEmail($guest->email, $subject, $message);
+        if (!$this->isAuthenticated) {
+            Log::warning('GmailService not authenticated - email not sent for reservation confirmation');
+            return false;
+        }
+
+        try {
+            $subject = "Reservation Confirmed - Booking Complete - AzureHotel";
+            $message = $this->createReservationConfirmedTemplate($reservation, $guest, $payment);
+            return $this->sendEmail($guest->email, $subject, $message);
+        } catch (\Exception $e) {
+            Log::error('Failed to send reservation confirmed email: ' . $e->getMessage());
+            return false;
+        }
     }
 
     public function sendReservationCancellationWarning($reservation, $guest)
     {
-        $subject = "URGENT: Reservation Cancellation Warning - Grand Paradise Hotel";
-        
-        $message = $this->createCancellationWarningTemplate($reservation, $guest);
-        
-        return $this->sendEmail($guest->email, $subject, $message);
+        if (!$this->isAuthenticated) {
+            Log::warning('GmailService not authenticated - email not sent for cancellation warning');
+            return false;
+        }
+
+        try {
+            $subject = "URGENT: Reservation Cancellation Warning - AzureHotel";
+            $message = $this->createCancellationWarningTemplate($reservation, $guest);
+            return $this->sendEmail($guest->email, $subject, $message);
+        } catch (\Exception $e) {
+            Log::error('Failed to send cancellation warning email: ' . $e->getMessage());
+            return false;
+        }
     }
 
     public function sendReservationCancelledEmail($reservation, $guest)
     {
-        $subject = "Reservation Cancelled - Grand Paradise Hotel";
-        
-        $message = $this->createCancellationTemplate($reservation, $guest);
-        
-        return $this->sendEmail($guest->email, $subject, $message);
-    }
-
-    private function createReservationCreatedTemplate($reservation, $guest)
-    {
-        $roomNumbers = [];
-        if ($reservation->bookings) {
-            foreach($reservation->bookings as $booking) {
-                if ($booking->rooms) {
-                    foreach($booking->rooms as $bookingRoom) {
-                        if ($bookingRoom->room) {
-                            $roomNumbers[] = $bookingRoom->room->room_number;
-                        }
-                    }
-                }
-            }
-        }
-        $roomNumbers = array_unique($roomNumbers);
-        $roomNumbersDisplay = count($roomNumbers) > 0 ? implode(', ', $roomNumbers) : 'To be assigned';
-
-        $checkIn = \Carbon\Carbon::parse($reservation->check_in_date);
-        $checkOut = \Carbon\Carbon::parse($reservation->check_out_date);
-        $nights = $checkIn->diffInDays($checkOut);
-
-        return "
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset='UTF-8'>
-            <style>
-                body { font-family: 'Arial', sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
-                .container { max-width: 600px; margin: 0 auto; background: #ffffff; }
-                .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px 20px; text-align: center; }
-                .content { padding: 30px; background: #f9f9f9; }
-                .footer { background: #2c3e50; color: white; padding: 20px; text-align: center; font-size: 12px; }
-                .warning { background: #fff3cd; border: 1px solid #ffeaa7; padding: 20px; margin: 20px 0; border-radius: 5px; }
-                .info-box { background: white; border: 1px solid #e1e8ed; padding: 20px; margin: 15px 0; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-                .button { display: inline-block; padding: 12px 30px; background: #28a745; color: white; text-decoration: none; border-radius: 5px; margin: 10px 0; }
-                .highlight { color: #e74c3c; font-weight: bold; }
-            </style>
-        </head>
-        <body>
-            <div class='container'>
-                <div class='header'>
-                    <h1>🏨 Grand Paradise Hotel</h1>
-                    <h2>Reservation Created Successfully</h2>
-                </div>
-                
-                <div class='content'>
-                    <p>Dear <strong>{$guest->first_name} {$guest->last_name}</strong>,</p>
-                    
-                    <p>Thank you for choosing Grand Paradise Hotel! Your reservation has been successfully created and is currently <span class='highlight'>pending confirmation</span>.</p>
-                    
-                    <div class='info-box'>
-                        <h3 style='color: #2c5aa0; margin-top: 0;'>📋 Reservation Summary</h3>
-                        <p><strong>Reservation ID:</strong> #{$reservation->reservation_id}</p>
-                        <p><strong>Check-in Date:</strong> {$checkIn->format('F d, Y')}</p>
-                        <p><strong>Check-out Date:</strong> {$checkOut->format('F d, Y')}</p>
-                        <p><strong>Duration:</strong> {$nights} night(s)</p>
-                        <p><strong>Number of Guests:</strong> {$reservation->num_guests}</p>
-                    </div>
-                    
-                    <div class='info-box'>
-                        <h3 style='color: #2c5aa0; margin-top: 0;'>🛏️ Room Information</h3>
-                        <p><strong>Room Type:</strong> {$reservation->roomType->type_name}</p>
-                        <p><strong>Room Number(s):</strong> {$roomNumbersDisplay}</p>
-                        <p><strong>Total Amount:</strong> <span style='font-size: 1.2em; color: #27ae60;'>₱" . number_format($reservation->total_amount, 2) . "</span></p>
-                    </div>
-                    
-                    <div class='warning'>
-                        <h4 style='color: #e74c3c; margin-top: 0;'>⚠️ Important: Payment Required</h4>
-                        <p>Your reservation will be <span class='highlight'>automatically cancelled</span> if payment is not completed within <strong>24 hours</strong>.</p>
-                        <p>To secure your booking, please complete the payment as soon as possible.</p>
-                    </div>
-                    
-                    <div style='text-align: center; margin: 25px 0;'>
-                        <p>Need assistance with your payment?</p>
-                        <p>Contact our reservation team at <strong>+63 2 8122 4567</strong> or reply to this email.</p>
-                    </div>
-                    
-                    <p>We look forward to welcoming you to Grand Paradise Hotel!</p>
-                    
-                    <p>Warm regards,<br>
-                    <strong>The Grand Paradise Hotel Team</strong></p>
-                </div>
-                
-                <div class='footer'>
-                    <p>Grand Paradise Hotel • 123 Paradise Street, Makati City, Metro Manila, Philippines</p>
-                    <p>📞 +63 2 8122 4567 • ✉️ info@grandparadise.com • 🌐 www.grandparadise.com</p>
-                    <p style='margin-top: 15px; font-size: 11px; color: #bdc3c7;'>
-                        This is an automated message. Please do not reply to this email.
-                    </p>
-                </div>
-            </div>
-        </body>
-        </html>
-        ";
-    }
-
-    private function createReservationConfirmedTemplate($reservation, $guest, $payment = null)
-    {
-        $roomNumbers = [];
-        if ($reservation->bookings) {
-            foreach($reservation->bookings as $booking) {
-                if ($booking->rooms) {
-                    foreach($booking->rooms as $bookingRoom) {
-                        if ($bookingRoom->room) {
-                            $roomNumbers[] = $bookingRoom->room->room_number;
-                        }
-                    }
-                }
-            }
-        }
-        $roomNumbers = array_unique($roomNumbers);
-        $roomNumbersDisplay = count($roomNumbers) > 0 ? implode(', ', $roomNumbers) : 'To be assigned';
-
-        $checkIn = \Carbon\Carbon::parse($reservation->check_in_date);
-        $checkOut = \Carbon\Carbon::parse($reservation->check_out_date);
-        $nights = $checkIn->diffInDays($checkOut);
-
-        $paymentInfo = "";
-        if ($payment) {
-            $paymentDate = \Carbon\Carbon::parse($payment->payment_date);
-            $paymentInfo = "
-            <div class='info-box'>
-                <h3 style='color: #27ae60; margin-top: 0;'>💳 Payment Details</h3>
-                <p><strong>Payment Method:</strong> " . ucfirst($payment->payment_method) . "</p>
-                <p><strong>Amount Paid:</strong> <span style='color: #27ae60; font-weight: bold;'>₱" . number_format($payment->amount, 2) . "</span></p>
-                <p><strong>Payment Date:</strong> {$paymentDate->format('F d, Y g:i A')}</p>
-                <p><strong>Transaction ID:</strong> {$payment->transaction_id}</p>
-                <p><strong>Payment Status:</strong> <span style='color: #27ae60;'>" . ucfirst($payment->payment_status) . "</span></p>
-            </div>
-            ";
+        if (!$this->isAuthenticated) {
+            Log::warning('GmailService not authenticated - email not sent for cancellation');
+            return false;
         }
 
-        return "
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset='UTF-8'>
-            <style>
-                body { font-family: 'Arial', sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
-                .container { max-width: 600px; margin: 0 auto; background: #ffffff; }
-                .header { background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%); color: white; padding: 30px 20px; text-align: center; }
-                .content { padding: 30px; background: #f9f9f9; }
-                .footer { background: #2c3e50; color: white; padding: 20px; text-align: center; font-size: 12px; }
-                .success { background: #d4edda; border: 1px solid #c3e6cb; padding: 25px; margin: 20px 0; border-radius: 8px; text-align: center; }
-                .info-box { background: white; border: 1px solid #e1e8ed; padding: 20px; margin: 15px 0; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-                .instructions { background: #e8f4fd; border: 1px solid #b6e0fe; padding: 20px; margin: 20px 0; border-radius: 8px; }
-            </style>
-        </head>
-        <body>
-            <div class='container'>
-                <div class='header'>
-                    <h1>🏨 Grand Paradise Hotel</h1>
-                    <h2>Reservation Confirmed! 🎉</h2>
-                </div>
-                
-                <div class='content'>
-                    <div class='success'>
-                        <h3 style='margin: 0; color: #155724;'>✅ Your Booking is Confirmed!</h3>
-                        <p style='margin: 10px 0 0 0; font-size: 1.1em;'>We're excited to welcome you to Grand Paradise Hotel!</p>
-                    </div>
-                    
-                    <p>Dear <strong>{$guest->first_name} {$guest->last_name}</strong>,</p>
-                    
-                    <p>Your reservation has been successfully confirmed and your payment has been processed. Your booking is now secured!</p>
-                    
-                    <div class='info-box'>
-                        <h3 style='color: #2c5aa0; margin-top: 0;'>📋 Booking Confirmation</h3>
-                        <p><strong>Reservation ID:</strong> <span style='background: #f8f9fa; padding: 2px 8px; border-radius: 4px;'>#{$reservation->reservation_id}</span></p>
-                        <p><strong>Check-in:</strong> {$checkIn->format('l, F d, Y')} (2:00 PM)</p>
-                        <p><strong>Check-out:</strong> {$checkOut->format('l, F d, Y')} (12:00 PM)</p>
-                        <p><strong>Duration:</strong> {$nights} night(s)</p>
-                        <p><strong>Guests:</strong> {$reservation->num_guests} person(s)</p>
-                    </div>
-                    
-                    <div class='info-box'>
-                        <h3 style='color: #2c5aa0; margin-top: 0;'>🛏️ Accommodation Details</h3>
-                        <p><strong>Room Type:</strong> {$reservation->roomType->type_name}</p>
-                        <p><strong>Room Number(s):</strong> <strong>{$roomNumbersDisplay}</strong></p>
-                        <p><strong>Total Amount:</strong> <span style='font-size: 1.2em; color: #27ae60; font-weight: bold;'>₱" . number_format($reservation->total_amount, 2) . "</span></p>
-                    </div>
-                    
-                    {$paymentInfo}
-                    
-                    <div class='instructions'>
-                        <h3 style='color: #2c5aa0; margin-top: 0;'>📝 Check-in Information</h3>
-                        <p>• <strong>Check-in Time:</strong> 2:00 PM onwards</p>
-                        <p>• <strong>Check-out Time:</strong> 12:00 PM</p>
-                        <p>• <strong>Required at Check-in:</strong> Valid government-issued ID</p>
-                        <p>• <strong>Early Check-in/Late Check-out:</strong> Subject to availability and additional charges</p>
-                        <p>• <strong>Parking:</strong> Complimentary parking available</p>
-                    </div>
-                    
-                    <div style='background: #fff3e0; border: 1px solid #ffb74d; padding: 15px; border-radius: 5px; margin: 20px 0;'>
-                        <p style='margin: 0; color: #e65100;'><strong>💡 Tip:</strong> Present this confirmation email at the front desk for faster check-in.</p>
-                    </div>
-                    
-                    <p>Should you have any questions or require special arrangements, please don't hesitate to contact us.</p>
-                    
-                    <p>We can't wait to make your stay memorable!</p>
-                    
-                    <p>Warm regards,<br>
-                    <strong>The Grand Paradise Hotel Team</strong></p>
-                </div>
-                
-                <div class='footer'>
-                    <p>Grand Paradise Hotel • 123 Paradise Street, Makati City, Metro Manila, Philippines</p>
-                    <p>📞 +63 2 8122 4567 • ✉️ info@grandparadise.com • 🌐 www.grandparadise.com</p>
-                    <p style='margin-top: 15px; font-size: 11px; color: #bdc3c7;'>
-                        This is an automated message. Please do not reply to this email.
-                    </p>
-                </div>
-            </div>
-        </body>
-        </html>
-        ";
-    }
-
-    private function createCancellationWarningTemplate($reservation, $guest)
-    {
-        $checkIn = \Carbon\Carbon::parse($reservation->check_in_date);
-        
-        return "
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset='UTF-8'>
-            <style>
-                body { font-family: 'Arial', sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
-                .container { max-width: 600px; margin: 0 auto; background: #ffffff; }
-                .header { background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%); color: white; padding: 30px 20px; text-align: center; }
-                .content { padding: 30px; background: #f9f9f9; }
-                .footer { background: #2c3e50; color: white; padding: 20px; text-align: center; font-size: 12px; }
-                .urgent { background: #f8d7da; border: 1px solid #f5c6cb; padding: 25px; margin: 20px 0; border-radius: 8px; }
-                .info-box { background: white; border: 1px solid #e1e8ed; padding: 20px; margin: 15px 0; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-                .button { display: inline-block; padding: 12px 30px; background: #e74c3c; color: white; text-decoration: none; border-radius: 5px; margin: 10px 0; }
-            </style>
-        </head>
-        <body>
-            <div class='container'>
-                <div class='header'>
-                    <h1>🏨 Grand Paradise Hotel</h1>
-                    <h2>Reservation Cancellation Warning</h2>
-                </div>
-                
-                <div class='content'>
-                    <div class='urgent'>
-                        <h3 style='margin: 0; color: #721c24;'>🚨 URGENT: Payment Required to Secure Your Booking</h3>
-                        <p style='margin: 10px 0 0 0; font-size: 1.1em;'>Your reservation will be cancelled in less than 1 hour if payment is not completed.</p>
-                    </div>
-                    
-                    <p>Dear <strong>{$guest->first_name} {$guest->last_name}</strong>,</p>
-                    
-                    <p>We noticed that your reservation <strong>#{$reservation->reservation_id}</strong> is still pending payment. This is a final reminder to complete your payment to avoid automatic cancellation.</p>
-                    
-                    <div class='info-box'>
-                        <h3 style='color: #e74c3c; margin-top: 0;'>📋 Reservation Details</h3>
-                        <p><strong>Reservation ID:</strong> #{$reservation->reservation_id}</p>
-                        <p><strong>Check-in Date:</strong> {$checkIn->format('F d, Y')}</p>
-                        <p><strong>Room Type:</strong> {$reservation->roomType->type_name}</p>
-                        <p><strong>Total Amount:</strong> ₱" . number_format($reservation->total_amount, 2) . "</p>
-                    </div>
-                    
-                    <div style='background: #fff3cd; border: 1px solid #ffeaa7; padding: 20px; border-radius: 5px; margin: 20px 0;'>
-                        <h4 style='margin: 0 0 10px 0; color: #856404;'>⏰ Immediate Action Required</h4>
-                        <p style='margin: 0;'>Your reservation will be <strong>automatically cancelled in 1 hour</strong> if payment is not completed.</p>
-                    </div>
-                    
-                    <p>To secure your booking, please complete your payment immediately through our payment portal or contact our reservation team for assistance.</p>
-                    
-                    <div style='text-align: center; margin: 25px 0;'>
-                        <p><strong>Need help with payment?</strong></p>
-                        <p>Call us now: <strong style='color: #e74c3c;'>+63 2 8122 4567</strong></p>
-                        <p>Email: <strong>reservations@grandparadise.com</strong></p>
-                    </div>
-                    
-                    <p>We'd hate to see your reservation cancelled. Act now to secure your stay!</p>
-                    
-                    <p>Sincerely,<br>
-                    <strong>The Grand Paradise Hotel Team</strong></p>
-                </div>
-                
-                <div class='footer'>
-                    <p>Grand Paradise Hotel • 123 Paradise Street, Makati City, Metro Manila, Philippines</p>
-                    <p>📞 +63 2 8122 4567 • ✉️ info@grandparadise.com</p>
-                </div>
-            </div>
-        </body>
-        </html>
-        ";
-    }
-
-    private function createCancellationTemplate($reservation, $guest)
-    {
-        return "
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset='UTF-8'>
-            <style>
-                body { font-family: 'Arial', sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
-                .container { max-width: 600px; margin: 0 auto; background: #ffffff; }
-                .header { background: #95a5a6; color: white; padding: 30px 20px; text-align: center; }
-                .content { padding: 30px; background: #f9f9f9; }
-                .footer { background: #2c3e50; color: white; padding: 20px; text-align: center; font-size: 12px; }
-                .cancelled { background: #e9ecef; border: 1px solid #dee2e6; padding: 25px; margin: 20px 0; border-radius: 8px; text-align: center; }
-                .info-box { background: white; border: 1px solid #e1e8ed; padding: 20px; margin: 15px 0; border-radius: 8px; }
-            </style>
-        </head>
-        <body>
-            <div class='container'>
-                <div class='header'>
-                    <h1>🏨 Grand Paradise Hotel</h1>
-                    <h2>Reservation Cancelled</h2>
-                </div>
-                
-                <div class='content'>
-                    <div class='cancelled'>
-                        <h3 style='margin: 0; color: #6c757d;'>❌ Reservation Cancelled</h3>
-                        <p style='margin: 10px 0 0 0;'>We're sorry to see you go.</p>
-                    </div>
-                    
-                    <p>Dear <strong>{$guest->first_name} {$guest->last_name}</strong>,</p>
-                    
-                    <p>Your reservation <strong>#{$reservation->reservation_id}</strong> has been cancelled as we did not receive payment within the required timeframe.</p>
-                    
-                    <div class='info-box'>
-                        <h3 style='color: #6c757d; margin-top: 0;'>Cancelled Reservation</h3>
-                        <p><strong>Reservation ID:</strong> #{$reservation->reservation_id}</p>
-                        <p><strong>Room Type:</strong> {$reservation->roomType->type_name}</p>
-                        <p><strong>Cancellation Reason:</strong> No payment received within 24 hours</p>
-                        <p><strong>Cancellation Date:</strong> " . now()->format('F d, Y g:i A') . "</p>
-                    </div>
-                    
-                    <p>If you believe this cancellation was made in error, or if you'd like to make a new reservation, please contact our reservation team.</p>
-                    
-                    <p>We hope to welcome you to Grand Paradise Hotel in the future!</p>
-                    
-                    <p>Sincerely,<br>
-                    <strong>The Grand Paradise Hotel Team</strong></p>
-                </div>
-                
-                <div class='footer'>
-                    <p>Grand Paradise Hotel • 123 Paradise Street, Makati City, Metro Manila, Philippines</p>
-                    <p>📞 +63 2 8122 4567 • ✉️ info@grandparadise.com</p>
-                </div>
-            </div>
-        </body>
-        </html>
-        ";
+        try {
+            $subject = "Reservation Cancelled - AzureHotel";
+            $message = $this->createCancellationTemplate($reservation, $guest);
+            return $this->sendEmail($guest->email, $subject, $message);
+        } catch (\Exception $e) {
+            Log::error('Failed to send cancellation email: ' . $e->getMessage());
+            return false;
+        }
     }
 
     private function sendEmail($to, $subject, $message)
     {
         try {
             // Prepare message
-            $message = new Google_Service_Gmail_Message();
+            $gmailMessage = new Google_Service_Gmail_Message();
             
             $rawMessage = "To: {$to}\r\n";
             $rawMessage .= "Subject: {$subject}\r\n";
@@ -456,10 +168,10 @@ class GmailService
             
             $encodedMessage = base64_encode($rawMessage);
             $encodedMessage = str_replace(['+', '/', '='], ['-', '_', ''], $encodedMessage);
-            $message->setRaw($encodedMessage);
+            $gmailMessage->setRaw($encodedMessage);
             
             // Send message
-            $this->service->users_messages->send('me', $message);
+            $this->service->users_messages->send('me', $gmailMessage);
             
             Log::info("Email sent successfully to: {$to} - Subject: {$subject}");
             return true;
@@ -483,16 +195,429 @@ class GmailService
      */
     public function setAuthCode($code)
     {
-        $accessToken = $this->client->fetchAccessTokenWithAuthCode($code);
-        $this->client->setAccessToken($accessToken);
+        try {
+            $accessToken = $this->client->fetchAccessTokenWithAuthCode($code);
+            $this->client->setAccessToken($accessToken);
 
-        // Save the token to file
-        $tokenPath = storage_path('app/gmail-token.json');
-        if (!file_exists(dirname($tokenPath))) {
-            mkdir(dirname($tokenPath), 0700, true);
+            // Check if there was an error
+            if (array_key_exists('error', $accessToken)) {
+                throw new \Exception($accessToken['error_description'] ?? 'Authentication failed');
+            }
+
+            // Save the token to file
+            $tokenPath = storage_path('app/gmail-token.json');
+            if (!file_exists(dirname($tokenPath))) {
+                mkdir(dirname($tokenPath), 0700, true);
+            }
+            file_put_contents($tokenPath, json_encode($this->client->getAccessToken()));
+
+            return $accessToken;
+        } catch (\Exception $e) {
+            Log::error('Gmail authentication failed: ' . $e->getMessage());
+            throw $e;
         }
-        file_put_contents($tokenPath, json_encode($this->client->getAccessToken()));
-
-        return $accessToken;
     }
+
+    // Email Template Methods
+
+    private function createReservationCreatedTemplate($reservation, $guest)
+    {
+        $checkIn = \Carbon\Carbon::parse($reservation->check_in_date);
+        $checkOut = \Carbon\Carbon::parse($reservation->check_out_date);
+        $nights = $checkIn->diffInDays($checkOut);
+        
+        // Get room numbers
+        $roomNumbers = [];
+        foreach($reservation->bookings as $booking) {
+            foreach($booking->rooms as $bookingRoom) {
+                $roomNumbers[] = $bookingRoom->room->room_number;
+            }
+        }
+        $roomNumbers = implode(', ', array_unique($roomNumbers));
+
+        return "
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <style>
+                    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+                    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                    .header { background: #2c5aa0; color: white; padding: 20px; text-align: center; }
+                    .content { background: #f9f9f9; padding: 20px; }
+                    .footer { background: #eee; padding: 10px; text-align: center; font-size: 12px; }
+                    .reservation-details { background: white; padding: 15px; border-radius: 5px; margin: 15px 0; }
+                </style>
+            </head>
+            <body>
+                <div class='container'>
+                    <div class='header'>
+                        <h1>AzureHotel</h1>
+                        <h2>Reservation Created</h2>
+                    </div>
+                    
+                    <div class='content'>
+                        <p>Dear {$guest->first_name} {$guest->last_name},</p>
+                        
+                        <p>Your reservation has been successfully created. Please complete your payment within 24 hours to confirm your booking.</p>
+                        
+                        <div class='reservation-details'>
+                            <h3>Reservation Details:</h3>
+                            <p><strong>Reservation ID:</strong> {$reservation->reservation_id}</p>
+                            <p><strong>Check-in:</strong> {$checkIn->format('F j, Y')}</p>
+                            <p><strong>Check-out:</strong> {$checkOut->format('F j, Y')}</p>
+                            <p><strong>Nights:</strong> {$nights}</p>
+                            <p><strong>Rooms:</strong> {$roomNumbers}</p>
+                            <p><strong>Total Amount:</strong> ₱" . number_format($reservation->total_amount, 2) . "</p>
+                            <p><strong>Guests:</strong> {$reservation->num_guests}</p>
+                        </div>
+                        
+                        <p><strong>Important:</strong> This reservation will expire on " . $reservation->expires_at->format('F j, Y g:i A') . "</p>
+                        
+                        <p>Thank you for choosing AzureHotel!</p>
+                    </div>
+                    
+                    <div class='footer'>
+                        <p>AzureHotel<br>
+                        Contact: 09225548058 | Email: Inq_AzureHotel@gmail.com</p>
+                    </div>
+                </div>
+            </body>
+            </html>
+        ";
+    }
+
+    private function createReservationConfirmedTemplate($reservation, $guest, $payment = null)
+    {
+        $checkIn = \Carbon\Carbon::parse($reservation->check_in_date);
+        $checkOut = \Carbon\Carbon::parse($reservation->check_out_date);
+        $nights = $checkIn->diffInDays($checkOut);
+        
+        // Get room numbers
+        $roomNumbers = [];
+        foreach($reservation->bookings as $booking) {
+            foreach($booking->rooms as $bookingRoom) {
+                $roomNumbers[] = $bookingRoom->room->room_number;
+            }
+        }
+        $roomNumbers = implode(', ', array_unique($roomNumbers));
+
+        $paymentSection = '';
+        if ($payment) {
+            $paymentSection = "
+                <div class='payment-details'>
+                    <h3>Payment Details:</h3>
+                    <p><strong>Payment Method:</strong> " . ucfirst($payment->payment_method) . "</p>
+                    <p><strong>Amount Paid:</strong> ₱" . number_format($payment->amount, 2) . "</p>
+                    <p><strong>Payment Date:</strong> " . $payment->payment_date->format('F j, Y') . "</p>
+                </div>
+            ";
+        }
+
+        return "
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <style>
+                    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+                    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                    .header { background: #27ae60; color: white; padding: 20px; text-align: center; }
+                    .content { background: #f9f9f9; padding: 20px; }
+                    .footer { background: #eee; padding: 10px; text-align: center; font-size: 12px; }
+                    .reservation-details { background: white; padding: 15px; border-radius: 5px; margin: 15px 0; }
+                    .payment-details { background: #e8f5e8; padding: 15px; border-radius: 5px; margin: 15px 0; }
+                </style>
+            </head>
+            <body>
+                <div class='container'>
+                    <div class='header'>
+                        <h1>AzureHotel</h1>
+                        <h2>Reservation Confirmed! 🎉</h2>
+                    </div>
+                    
+                    <div class='content'>
+                        <p>Dear {$guest->first_name} {$guest->last_name},</p>
+                        
+                        <p>Your reservation has been confirmed! We look forward to welcoming you to AzureHotel.</p>
+                        
+                        <div class='reservation-details'>
+                            <h3>Reservation Details:</h3>
+                            <p><strong>Reservation ID:</strong> {$reservation->reservation_id}</p>
+                            <p><strong>Check-in:</strong> {$checkIn->format('F j, Y')}</p>
+                            <p><strong>Check-out:</strong> {$checkOut->format('F j, Y')}</p>
+                            <p><strong>Nights:</strong> {$nights}</p>
+                            <p><strong>Rooms:</strong> {$roomNumbers}</p>
+                            <p><strong>Total Amount:</strong> ₱" . number_format($reservation->total_amount, 2) . "</p>
+                            <p><strong>Guests:</strong> {$reservation->num_guests}</p>
+                        </div>
+                        
+                        {$paymentSection}
+                        
+                        <p><strong>Check-in Instructions:</strong><br>
+                        - Please bring a valid ID<br>
+                        - Check-in time: 2:00 PM<br>
+                        - Check-out time: 12:00 PM</p>
+                        
+                        <p>Thank you for choosing AzureHotel!</p>
+                    </div>
+                    
+                    <div class='footer'>
+                        <p>AzureHotel<br>
+                        Contact: 09225548058 | Email: Inq_AzureHotel@gmail.com</p>
+                    </div>
+                </div>
+            </body>
+            </html>
+        ";
+    }
+
+    private function createCancellationWarningTemplate($reservation, $guest)
+    {
+        $expiryTime = $reservation->expires_at->format('F j, Y g:i A');
+        
+        return "
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <style>
+                    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+                    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                    .header { background: #e67e22; color: white; padding: 20px; text-align: center; }
+                    .content { background: #f9f9f9; padding: 20px; }
+                    .footer { background: #eee; padding: 10px; text-align: center; font-size: 12px; }
+                    .warning { background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 5px; margin: 15px 0; }
+                </style>
+            </head>
+            <body>
+                <div class='container'>
+                    <div class='header'>
+                        <h1>AzureHotel</h1>
+                        <h2>Reservation Expiring Soon ⚠️</h2>
+                    </div>
+                    
+                    <div class='content'>
+                        <p>Dear {$guest->first_name} {$guest->last_name},</p>
+                        
+                        <div class='warning'>
+                            <h3>URGENT: Your reservation will expire in 1 hour!</h3>
+                            <p>Your reservation #{$reservation->reservation_id} is about to expire at {$expiryTime}.</p>
+                        </div>
+                        
+                        <p>To keep your reservation active, please complete your payment immediately.</p>
+                        
+                        <p><strong>Total Amount Due:</strong> ₱" . number_format($reservation->total_amount, 2) . "</p>
+                        
+                        <p>If we don't receive payment within the next hour, your reservation will be automatically cancelled.</p>
+                        
+                        <p>Thank you,<br>AzureHotel Team</p>
+                    </div>
+                    
+                    <div class='footer'>
+                        <p>AzureHotel<br>
+                        Contact: 09225548058 | Email: Inq_AzureHotel@gmail.com</p>
+                    </div>
+                </div>
+            </body>
+            </html>
+        ";
+    }
+
+    private function createCancellationTemplate($reservation, $guest)
+    {
+        return "
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <style>
+                    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+                    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                    .header { background: #e74c3c; color: white; padding: 20px; text-align: center; }
+                    .content { background: #f9f9f9; padding: 20px; }
+                    .footer { background: #eee; padding: 10px; text-align: center; font-size: 12px; }
+                </style>
+            </head>
+            <body>
+                <div class='container'>
+                    <div class='header'>
+                        <h1>Azure Hotel</h1>
+                        <h2>Reservation Cancelled</h2>
+                    </div>
+                    
+                    <div class='content'>
+                        <p>Dear {$guest->first_name} {$guest->last_name},</p>
+                        
+                        <p>We're sorry to inform you that your reservation #{$reservation->reservation_id} has been cancelled.</p>
+                        
+                        <p><strong>Cancellation Reason:</strong> {$reservation->cancellation_reason}</p>
+                        
+                        <p>If this was a mistake or you have any questions, please contact us immediately.</p>
+                        
+                        <p>We hope to serve you in the future.</p>
+                        
+                        <p>Sincerely,<br>AzureHotel Team</p>
+                    </div>
+
+                    <div class='footer'>
+                        <p>AzureHotel<br>
+                        Contact: 09225548058 | Email: Inq_AzureHotel@gmail.com</p>
+                    </div>
+                </div>
+            </body>
+            </html>
+        ";
+    }
+
+    /**
+     * Create payment confirmation email template
+     */
+    private function createPaymentConfirmedTemplate($reservation, $guest, $payment)
+    {
+        $checkIn = \Carbon\Carbon::parse($reservation->check_in_date);
+        $checkOut = \Carbon\Carbon::parse($reservation->check_out_date);
+        $nights = $checkIn->diffInDays($checkOut);
+        
+        // Get room numbers
+        $roomNumbers = [];
+        foreach($reservation->bookings as $booking) {
+            foreach($booking->rooms as $bookingRoom) {
+                $roomNumbers[] = $bookingRoom->room->room_number;
+            }
+        }
+        $roomNumbers = implode(', ', array_unique($roomNumbers));
+
+        // Format payment method display
+        $paymentMethod = ucfirst(str_replace('_', ' ', $payment->payment_method));
+        $paymentDate = $payment->payment_date ? \Carbon\Carbon::parse($payment->payment_date)->format('F j, Y g:i A') : now()->format('F j, Y g:i A');
+        
+        // Format transaction ID based on payment method
+        $transactionId = $payment->transaction_id;
+        if ($payment->payment_method === 'cash') {
+            $transactionId = "Cash Payment - " . ($payment->transaction_id ?? 'N/A');
+        } elseif ($payment->payment_method === 'credit_card') {
+            $transactionId = "Card Payment - " . ($payment->transaction_id ?? 'N/A');
+        } elseif ($payment->payment_method === 'online') {
+            $transactionId = "Online Payment - " . ($payment->transaction_id ?? 'N/A');
+        }
+
+        return "
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <style>
+                    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+                    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                    .header { background: #27ae60; color: white; padding: 20px; text-align: center; }
+                    .content { background: #f9f9f9; padding: 20px; }
+                    .footer { background: #eee; padding: 10px; text-align: center; font-size: 12px; }
+                    .reservation-details { background: white; padding: 15px; border-radius: 5px; margin: 15px 0; }
+                    .payment-details { background: #e8f5e8; padding: 15px; border-radius: 5px; margin: 15px 0; border-left: 4px solid #27ae60; }
+                    .success-badge { background: #27ae60; color: white; padding: 10px 15px; border-radius: 5px; display: inline-block; margin: 10px 0; }
+                    .instructions { background: #e3f2fd; padding: 15px; border-radius: 5px; margin: 15px 0; border-left: 4px solid #2196f3; }
+                </style>
+            </head>
+            <body>
+                <div class='container'>
+                    <div class='header'>
+                        <h1>AzureHotel</h1>
+                        <h2>Payment Confirmed! 🎉</h2>
+                    </div>
+                    
+                    <div class='content'>
+                        <div class='success-badge'>
+                            <strong>✅ Payment Successful! Your reservation is now confirmed.</strong>
+                        </div>
+                        
+                        <p>Dear {$guest->first_name} {$guest->last_name},</p>
+                        
+                        <p>We're pleased to inform you that your payment has been processed successfully and your reservation is now confirmed.</p>
+                        
+                        <div class='payment-details'>
+                            <h3>💰 Payment Details:</h3>
+                            <p><strong>Payment Method:</strong> {$paymentMethod}</p>
+                            <p><strong>Amount Paid:</strong> ₱" . number_format($payment->amount, 2) . "</p>
+                            <p><strong>Transaction ID:</strong> {$transactionId}</p>
+                            <p><strong>Payment Date:</strong> {$paymentDate}</p>
+                            <p><strong>Payment Status:</strong> <span style='color: #27ae60; font-weight: bold;'>Completed</span></p>
+                        </div>
+                        
+                        <div class='reservation-details'>
+                            <h3>📅 Reservation Details:</h3>
+                            <p><strong>Reservation ID:</strong> {$reservation->reservation_id}</p>
+                            <p><strong>Check-in:</strong> {$checkIn->format('F j, Y')} (2:00 PM)</p>
+                            <p><strong>Check-out:</strong> {$checkOut->format('F j, Y')} (12:00 PM)</p>
+                            <p><strong>Duration:</strong> {$nights} night" . ($nights > 1 ? 's' : '') . "</p>
+                            <p><strong>Room(s):</strong> {$roomNumbers}</p>
+                            <p><strong>Total Amount:</strong> ₱" . number_format($reservation->total_amount, 2) . "</p>
+                            <p><strong>Number of Guests:</strong> {$reservation->num_guests}</p>
+                        </div>
+                        
+                        <div class='instructions'>
+                            <h3>📋 Check-in Instructions:</h3>
+                            <p>• Please bring a valid government-issued ID</p>
+                            <p>• Check-in time: 2:00 PM</p>
+                            <p>• Check-out time: 12:00 PM</p>
+                            <p>• Early check-in/late check-out subject to availability</p>
+                            <p>• Contact us for any special requests or assistance</p>
+                        </div>
+                        
+                        <p>We look forward to welcoming you to AzureHotel and ensuring you have a comfortable and memorable stay!</p>
+                        
+                        <p>Warm regards,<br>
+                        <strong>The AzureHotel Team</strong></p>
+                    </div>
+                    
+                    <div class='footer'>
+                        <p><strong>AzureHotel</strong><br>
+                        📞 Contact: 09225548058 | 📧 Email: Inq_AzureHotel@gmail.com<br>
+                        ⏰ Front Desk Hours: 24/7</p>
+                        <p><em>Thank you for choosing AzureHotel for your accommodation needs!</em></p>
+                    </div>
+                </div>
+            </body>
+            </html>
+        ";
+    }
+
+    // REMOVE OR COMMENT OUT THIS DUPLICATE METHOD - it's causing confusion
+    /*
+    private function sendPaymentConfirmationEmail($reservation, $payment)
+    {
+        try {
+            \Log::info("=== PAYMENT EMAIL DEBUG START ===");
+            \Log::info("Reservation ID: " . $reservation->reservation_id);
+            \Log::info("Payment ID: " . $payment->payment_id);
+            \Log::info("Guest Email: " . $reservation->guest->email);
+
+            // Reload relationships to ensure we have fresh data
+            $reservation->load(['guest', 'roomType', 'bookings.rooms.room']);
+            \Log::info("Relationships loaded successfully");
+
+            // Use the GmailService
+            $gmailService = new \App\Services\GmailService();
+            \Log::info("GmailService instantiated");
+
+            $isAuthenticated = $gmailService->isAuthenticated();
+            \Log::info("GmailService authenticated: " . ($isAuthenticated ? 'YES' : 'NO'));
+
+            if (!$isAuthenticated) {
+                \Log::error('GmailService not authenticated - cannot send email');
+                \Log::info("=== PAYMENT EMAIL DEBUG END (FAILED AUTH) ===");
+                return false;
+            }
+
+            \Log::info("Attempting to send payment confirmation email...");
+            $emailSent = $gmailService->sendPaymentConfirmedEmail($reservation, $reservation->guest, $payment);
+            
+            \Log::info("Email send result: " . ($emailSent ? 'SUCCESS' : 'FAILED'));
+            \Log::info("=== PAYMENT EMAIL DEBUG END ===");
+            
+            return $emailSent;
+            
+        } catch (\Exception $e) {
+            \Log::error('PAYMENT EMAIL EXCEPTION: ' . $e->getMessage());
+            \Log::error('Stack trace: ' . $e->getTraceAsString());
+            \Log::info("=== PAYMENT EMAIL DEBUG END (EXCEPTION) ===");
+            return false;
+        }
+    }
+    */
 }

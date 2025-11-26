@@ -94,7 +94,7 @@
                 </a>
 
                 <!-- Filtered Sales -->
-                <a href="{{ route('reports') }}?start_date={{ $start_date }}&end_date={{ $end_date }}" class="bg-white rounded-xl shadow p-6 cursor-pointer hover:shadow-lg transition-shadow block border-2 border-green-300">
+                <a href="{{ route('report') }}?start_date={{ $start_date }}&end_date={{ $end_date }}" class="bg-white rounded-xl shadow p-6 cursor-pointer hover:shadow-lg transition-shadow block border-2 border-green-300">
                     <div class="flex items-center justify-between">
                         <div class="flex-1">
                             <p class="text-sm font-medium text-gray-600">Filtered Sales</p>

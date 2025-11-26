@@ -9,12 +9,22 @@ use App\Models\RoomType;
 use App\Models\Booking;
 use App\Models\BookingRoom;
 use App\Models\RoomHold;
+use App\Models\Payment;
+use App\Services\GmailService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Log;
 
 class ReservationController extends Controller
 {
+    protected $gmailService;
+
+    public function __construct()
+    {
+        $this->gmailService = new GmailService();
+    }
+
     // In your ReservationController index method
     public function index(Request $request)
     {
@@ -44,55 +54,54 @@ class ReservationController extends Controller
         $roomTypes = RoomType::all();
         return view('reservations.booking-wizard', compact('roomTypes'));
     }
-    // Add this method to your existing ReservationController
-// Add this method to your existing ReservationController
-public function getPaymentDetails(Reservation $reservation)
-{
-    try {
-        \Log::info('Payment details requested for reservation: ' . $reservation->reservation_id);
-        
-        // Eager load the relationships
-        $reservation->load(['guest', 'roomType', 'bookings.rooms.room']);
-        
-        // Get room numbers
-        $roomNumbers = [];
-        foreach($reservation->bookings as $booking) {
-            foreach($booking->rooms as $bookingRoom) {
-                $roomNumbers[] = $bookingRoom->room->room_number;
+
+    public function getPaymentDetails(Reservation $reservation)
+    {
+        try {
+            Log::info('Payment details requested for reservation: ' . $reservation->reservation_id);
+            
+            // Eager load the relationships
+            $reservation->load(['guest', 'roomType', 'bookings.rooms.room']);
+            
+            // Get room numbers
+            $roomNumbers = [];
+            foreach($reservation->bookings as $booking) {
+                foreach($booking->rooms as $bookingRoom) {
+                    $roomNumbers[] = $bookingRoom->room->room_number;
+                }
             }
+            $roomNumbers = array_unique($roomNumbers);
+            
+            return response()->json([
+                'success' => true,
+                'reservation' => [
+                    'reservation_id' => $reservation->reservation_id,
+                    'guest' => [
+                        'first_name' => $reservation->guest->first_name,
+                        'last_name' => $reservation->guest->last_name,
+                        'email' => $reservation->guest->email,
+                        'contact_number' => $reservation->guest->contact_number,
+                    ],
+                    'check_in_date' => $reservation->check_in_date->format('M j, Y'),
+                    'check_out_date' => $reservation->check_out_date->format('M j, Y'),
+                    'nights' => $reservation->check_in_date->diffInDays($reservation->check_out_date),
+                    'total_amount' => $reservation->total_amount,
+                    'room_numbers' => implode(', ', $roomNumbers),
+                ]
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('Error in getPaymentDetails: ' . $e->getMessage());
+            Log::error($e->getTraceAsString());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Error loading reservation: ' . $e->getMessage()
+            ], 500);
         }
-        $roomNumbers = array_unique($roomNumbers);
-        
-        return response()->json([
-            'success' => true,
-            'reservation' => [
-                'reservation_id' => $reservation->reservation_id,
-                'guest' => [
-                    'first_name' => $reservation->guest->first_name,
-                    'last_name' => $reservation->guest->last_name,
-                    'email' => $reservation->guest->email,
-                    'contact_number' => $reservation->guest->contact_number,
-                ],
-                'check_in_date' => $reservation->check_in_date->format('M j, Y'),
-                'check_out_date' => $reservation->check_out_date->format('M j, Y'),
-                'nights' => $reservation->check_in_date->diffInDays($reservation->check_out_date),
-                'total_amount' => $reservation->total_amount,
-                'room_numbers' => implode(', ', $roomNumbers),
-            ]
-        ]);
-        
-    } catch (\Exception $e) {
-        \Log::error('Error in getPaymentDetails: ' . $e->getMessage());
-        \Log::error($e->getTraceAsString());
-        
-        return response()->json([
-            'success' => false,
-            'message' => 'Error loading reservation: ' . $e->getMessage()
-        ], 500);
     }
-}
+
     // Get available rooms for selected dates and room type
-    // Add this method to your ReservationController
     public function getAvailableRooms(Request $request)
     {
         $request->validate([
@@ -175,148 +184,159 @@ public function getPaymentDetails(Reservation $reservation)
         }
     }
 
-    // Create reservation with multiple rooms
+    // Create reservation with multiple rooms - ONLY ADD EMAIL HERE
     public function store(Request $request)
-{
-    $request->validate([
-        'first_name' => 'required|string|max:100',
-        'last_name' => 'required|string|max:100',
-        'email' => 'required|email|max:150',
-        'contact_number' => 'required|string|max:20',
-        'check_in_date' => 'required|date|after:today',
-        'check_out_date' => 'required|date|after:check_in_date',
-        'num_guests' => 'required|integer|min:1',
-        'room_ids' => 'required|array|min:1',
-        'room_ids.*' => 'exists:rooms,room_id',
-        'booking_source' => 'required|in:walk-in,phone,online,agent',
-        'special_requests' => 'nullable|string',
-        'total_amount' => 'required|numeric|min:0'
-    ]);
-
-    DB::beginTransaction();
-    try {
-        // Create or find guest
-        $guest = Guest::firstOrCreate(
-            ['email' => $request->email],
-            [
-                'first_name' => $request->first_name,
-                'last_name' => $request->last_name,
-                'contact_number' => $request->contact_number,
-                'guest_type' => 'walk-in'
-            ]
-        );
-
-        // Calculate total nights
-        $checkIn = Carbon::parse($request->check_in_date);
-        $checkOut = Carbon::parse($request->check_out_date);
-        $nights = $checkIn->diffInDays($checkOut);
-
-        // Get room types from selected rooms
-        $rooms = Room::whereIn('room_id', $request->room_ids)->get();
-        $roomTypeId = $rooms->first()->room_type_id;
-
-        // Create reservation
-        $reservation = Reservation::create([
-            'guest_id' => $guest->guest_id,
-            'room_type_id' => $roomTypeId,
-            'check_in_date' => $request->check_in_date,
-            'check_out_date' => $request->check_out_date,
-            'num_guests' => $request->num_guests,
-            'total_amount' => $request->total_amount,
-            'status' => 'pending',
-            'reservation_type' => 'advance',
-            'booking_source' => $request->booking_source,
-            'special_requests' => $request->special_requests,
-            'expires_at' => now()->addDays(2)
+    {
+        $request->validate([
+            'first_name' => 'required|string|max:100',
+            'last_name' => 'required|string|max:100',
+            'email' => 'required|email|max:150',
+            'contact_number' => 'required|string|max:20',
+            'check_in_date' => 'required|date|after:today',
+            'check_out_date' => 'required|date|after:check_in_date',
+            'num_guests' => 'required|integer|min:1',
+            'room_ids' => 'required|array|min:1',
+            'room_ids.*' => 'exists:rooms,room_id',
+            'booking_source' => 'required|in:walk-in,phone,online,agent',
+            'special_requests' => 'nullable|string',
+            'total_amount' => 'required|numeric|min:0'
         ]);
 
-        // Create ONE booking for the reservation
-        $booking = Booking::create([
-            'reservation_id' => $reservation->reservation_id,
-            'booking_status' => 'reserved',
-            'booking_date' => now()
-            // NO room_id here anymore!
-        ]);
+        DB::beginTransaction();
+        try {
+            // Create or find guest
+            $guest = Guest::firstOrCreate(
+                ['email' => $request->email],
+                [
+                    'first_name' => $request->first_name,
+                    'last_name' => $request->last_name,
+                    'contact_number' => $request->contact_number,
+                    'guest_type' => 'walk-in'
+                ]
+            );
 
-        // Assign MULTIPLE rooms to the booking through booking_rooms
-        foreach ($rooms as $room) {
-            BookingRoom::create([
-                'booking_id' => $booking->booking_id,
-                'room_id' => $room->room_id,
-                'room_price' => $room->roomType->base_price
+            // Calculate total nights
+            $checkIn = Carbon::parse($request->check_in_date);
+            $checkOut = Carbon::parse($request->check_out_date);
+            $nights = $checkIn->diffInDays($checkOut);
+
+            // Get room types from selected rooms
+            $rooms = Room::whereIn('room_id', $request->room_ids)->get();
+            $roomTypeId = $rooms->first()->room_type_id;
+
+            // Create reservation
+            $reservation = Reservation::create([
+                'guest_id' => $guest->guest_id,
+                'room_type_id' => $roomTypeId,
+                'check_in_date' => $request->check_in_date,
+                'check_out_date' => $request->check_out_date,
+                'num_guests' => $request->num_guests,
+                'total_amount' => $request->total_amount,
+                'status' => 'pending',
+                'reservation_type' => 'advance',
+                'booking_source' => $request->booking_source,
+                'special_requests' => $request->special_requests,
+                'expires_at' => now()->addDays(2)
             ]);
+
+            // Create ONE booking for the reservation
+            $booking = Booking::create([
+                'reservation_id' => $reservation->reservation_id,
+                'booking_status' => 'reserved',
+                'booking_date' => now()
+            ]);
+
+            // Assign MULTIPLE rooms to the booking through booking_rooms
+            foreach ($rooms as $room) {
+                BookingRoom::create([
+                    'booking_id' => $booking->booking_id,
+                    'room_id' => $room->room_id,
+                    'room_price' => $room->roomType->base_price
+                ]);
+            }
+
+            // Remove room holds for this session
+            RoomHold::where('session_id', session()->getId())->delete();
+
+            // TRY TO SEND EMAIL (BUT DON'T BREAK IF IT FAILS)
+            $emailSent = false;
+            try {
+                // Load relationships for email
+                $reservation->load(['guest', 'roomType', 'bookings.rooms.room']);
+                $emailSent = $this->gmailService->sendReservationCreatedEmail($reservation, $reservation->guest);
+            } catch (\Exception $e) {
+                Log::error('Email failed but reservation created: ' . $e->getMessage());
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Reservation created successfully!' . ($emailSent ? ' Email sent.' : ''),
+                'reservation_id' => $reservation->reservation_id,
+                'booking_id' => $booking->booking_id,
+                'rooms_booked' => $rooms->count()
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Reservation creation failed: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to create reservation: ' . $e->getMessage()
+            ], 500);
         }
-
-        // Remove room holds for this session
-        RoomHold::where('session_id', session()->getId())->delete();
-
-        DB::commit();
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Reservation created successfully!',
-            'reservation_id' => $reservation->reservation_id,
-            'booking_id' => $booking->booking_id,
-            'rooms_booked' => $rooms->count()
-        ]);
-
-    } catch (\Exception $e) {
-        DB::rollBack();
-        \Log::error('Reservation creation failed: ' . $e->getMessage());
-        return response()->json([
-            'success' => false,
-            'message' => 'Failed to create reservation: ' . $e->getMessage()
-        ], 500);
     }
-}
 
     // Update reservation
     public function update(Request $request, Reservation $reservation)
-{
-    $request->validate([
-        'first_name' => 'required|string|max:100',
-        'last_name' => 'required|string|max:100',
-        'email' => 'required|email|max:150',
-        'contact_number' => 'required|string|max:20',
-        'check_in_date' => 'required|date',
-        'check_out_date' => 'required|date|after:check_in_date',
-        'num_guests' => 'required|integer|min:1',
-        'total_amount' => 'required|numeric|min:0',
-        'status' => 'required|in:pending,confirmed,checked-in,checked-out,cancelled',
-        'booking_source' => 'required|in:walk-in,phone,online,agent',
-        'special_requests' => 'nullable|string'
-    ]);
-
-    DB::beginTransaction();
-    try {
-        // Update guest information
-        $reservation->guest->update([
-            'first_name' => $request->first_name,
-            'last_name' => $request->last_name,
-            'email' => $request->email,
-            'contact_number' => $request->contact_number
+    {
+        $request->validate([
+            'first_name' => 'required|string|max:100',
+            'last_name' => 'required|string|max:100',
+            'email' => 'required|email|max:150',
+            'contact_number' => 'required|string|max:20',
+            'check_in_date' => 'required|date',
+            'check_out_date' => 'required|date|after:check_in_date',
+            'num_guests' => 'required|integer|min:1',
+            'total_amount' => 'required|numeric|min:0',
+            'status' => 'required|in:pending,confirmed,checked-in,checked-out,cancelled',
+            'booking_source' => 'required|in:walk-in,phone,online,agent',
+            'special_requests' => 'nullable|string'
         ]);
 
-        // Update reservation
-        $reservation->update([
-            'check_in_date' => $request->check_in_date,
-            'check_out_date' => $request->check_out_date,
-            'num_guests' => $request->num_guests,
-            'total_amount' => $request->total_amount,
-            'status' => $request->status,
-            'booking_source' => $request->booking_source,
-            'special_requests' => $request->special_requests
-        ]);
+        DB::beginTransaction();
+        try {
+            // Update guest information
+            $reservation->guest->update([
+                'first_name' => $request->first_name,
+                'last_name' => $request->last_name,
+                'email' => $request->email,
+                'contact_number' => $request->contact_number
+            ]);
 
-        DB::commit();
+            // Update reservation
+            $reservation->update([
+                'check_in_date' => $request->check_in_date,
+                'check_out_date' => $request->check_out_date,
+                'num_guests' => $request->num_guests,
+                'total_amount' => $request->total_amount,
+                'status' => $request->status,
+                'booking_source' => $request->booking_source,
+                'special_requests' => $request->special_requests
+            ]);
 
-        return redirect()->route('reservations.edit', $reservation)->with('success', 'Reservation updated successfully!');
+            DB::commit();
 
-    } catch (\Exception $e) {
-        DB::rollBack();
-        return back()->with('error', 'Failed to update reservation: ' . $e->getMessage());
+            return redirect()->route('reservations.index')
+                ->with('success', 'Reservation updated successfully!');
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return back()->with('error', 'Failed to update reservation: ' . $e->getMessage());
+        }
     }
-    }
+
     // Delete reservation
     public function destroy(Reservation $reservation)
     {
@@ -367,19 +387,17 @@ public function getPaymentDetails(Reservation $reservation)
         ]);
     }
   
-    // Add these missing methods to your ReservationController
-public function edit(Reservation $reservation)
-{
-    $reservation->load(['guest', 'roomType', 'bookings.rooms.room']);
-    $roomTypes = RoomType::all();
-    
-    return view('reservations.edit', compact('reservation', 'roomTypes'));
-}
+    public function edit(Reservation $reservation)
+    {
+        $reservation->load(['guest', 'roomType', 'bookings.rooms.room']);
+        $roomTypes = RoomType::all();
+        
+        return view('reservations.edit', compact('reservation', 'roomTypes'));
+    }
 
-public function show(Reservation $reservation)
-{
-    $reservation->load(['guest', 'roomType', 'bookings.rooms.room']);
-    return view('reservations.show', compact('reservation'));
-}
-
+    public function show(Reservation $reservation)
+    {
+        $reservation->load(['guest', 'roomType', 'bookings.rooms.room']);
+        return view('reservations.show', compact('reservation'));
+    }
 }

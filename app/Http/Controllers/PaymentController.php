@@ -8,9 +8,17 @@ use App\Models\Booking;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Services\StripePaymentService;
+use App\Services\GmailService;
 
 class PaymentController extends Controller
 {
+    protected $gmailService;
+
+    public function __construct()
+    {
+        $this->gmailService = new GmailService();
+    }
+
     public function getPaymentDetails(Reservation $reservation)
     {
         try {
@@ -84,11 +92,14 @@ class PaymentController extends Controller
                 'payment_date' => now()
             ]);
 
+            // Send payment confirmation email
+            $emailSent = $this->sendPaymentEmail($reservation, $payment);
+
             DB::commit();
 
             return response()->json([
                 'success' => true,
-                'message' => 'Reservation confirmed! Cash payment recorded.',
+                'message' => 'Reservation confirmed! Cash payment recorded.' . ($emailSent ? ' Confirmation email sent.' : ' Email failed but payment processed.'),
                 'payment_id' => $payment->payment_id
             ]);
 
@@ -142,11 +153,14 @@ class PaymentController extends Controller
                 'payment_date' => now()
             ]);
 
+            // Send payment confirmation email
+            $emailSent = $this->sendPaymentEmail($reservation, $payment);
+
             DB::commit();
 
             return response()->json([
                 'success' => true,
-                'message' => 'Reservation confirmed! Card payment simulated.',
+                'message' => 'Reservation confirmed! Card payment simulated.' . ($emailSent ? ' Confirmation email sent.' : ' Email failed but payment processed.'),
                 'payment_id' => $payment->payment_id
             ]);
 
@@ -256,11 +270,15 @@ class PaymentController extends Controller
                             ]);
                         }
 
+                        // Send payment confirmation email
+                        $emailSent = $this->sendPaymentEmail($reservation, $payment);
+
                         DB::commit();
 
                         return view('payments.stripe-success', [
                             'reservation' => $reservation,
-                            'payment' => $payment
+                            'payment' => $payment,
+                            'emailSent' => $emailSent
                         ]);
 
                     } catch (\Exception $e) {
@@ -370,12 +388,15 @@ class PaymentController extends Controller
                         ]);
                     }
 
+                    // Send payment confirmation email
+                    $emailSent = $this->sendPaymentEmail($reservation, $payment);
+
                     DB::commit();
 
                     return response()->json([
                         'success' => true,
                         'payment_status' => 'paid',
-                        'message' => 'Payment completed successfully!'
+                        'message' => 'Payment completed successfully!' . ($emailSent ? ' Confirmation email sent.' : ' Email failed but payment processed.')
                     ]);
                 }
             }
@@ -465,6 +486,9 @@ class PaymentController extends Controller
                     ]);
                 }
 
+                // Send payment confirmation email
+                $this->sendPaymentEmail($reservation, $payment);
+
                 DB::commit();
                 \Log::info('Payment completed via webhook for session: ' . $session->id);
             }
@@ -491,6 +515,41 @@ class PaymentController extends Controller
             }
         } catch (\Exception $e) {
             \Log::error('Webhook session expiration error: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * ADD THIS METHOD - Send payment confirmation email
+     */
+    private function sendPaymentEmail($reservation, $payment)
+    {
+        try {
+            \Log::info('Attempting to send payment confirmation email for reservation: ' . $reservation->reservation_id);
+            
+            // Reload relationships to ensure we have fresh data
+            $reservation->load(['guest', 'roomType', 'bookings.rooms.room']);
+            
+            // Check if GmailService is authenticated
+            if (!$this->gmailService->isAuthenticated()) {
+                \Log::warning('GmailService not authenticated - skipping email');
+                return false;
+            }
+
+            \Log::info('GmailService authenticated, sending payment confirmed email...');
+            $result = $this->gmailService->sendPaymentConfirmedEmail($reservation, $reservation->guest, $payment);
+            
+            if ($result) {
+                \Log::info('Payment confirmation email sent successfully to: ' . $reservation->guest->email);
+            } else {
+                \Log::warning('Payment confirmation email failed (returned false) for: ' . $reservation->guest->email);
+            }
+            
+            return $result;
+
+        } catch (\Exception $e) {
+            \Log::error('Payment email error for reservation ' . $reservation->reservation_id . ': ' . $e->getMessage());
+            \Log::error('Email exception trace: ' . $e->getTraceAsString());
+            return false;
         }
     }
 }
