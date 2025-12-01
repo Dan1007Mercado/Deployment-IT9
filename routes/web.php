@@ -71,17 +71,43 @@ Route::middleware('auth')->group(function () {
     Route::get('/guests', [TransactionController::class, 'index'])->name('guests');
     Route::get('/transactions', [TransactionController::class, 'index'])->name('transactions.index');
     
-    // Reports Routes - Dynamic with controller
+    // =========================================================================
+    // REPORTS ROUTES - DYNAMIC WITH CONTROLLER
+    // =========================================================================
+    Route::prefix('reports')->group(function () {
+        // Main reports page
+        Route::get('/', [ReportController::class, 'index'])->name('reports.index');
+        
+        // Generate report
+        Route::post('/generate', [ReportController::class, 'generate'])->name('reports.generate');
+        
+        // Download report as PDF
+        Route::get('/download/{id}', [ReportController::class, 'download'])->name('reports.download');
+        
+        // View report inline in browser
+        Route::get('/view/{id}', [ReportController::class, 'view'])->name('reports.view');
+        
+        // Delete report
+        Route::delete('/{id}', [ReportController::class, 'destroy'])->name('reports.destroy');
+        
+        // Quick report generation (if needed)
+        Route::get('/quick/{type}', [ReportController::class, 'quickReport'])->name('reports.quick');
+    });
+    
+    // Legacy report routes (for compatibility)
     Route::get('/report', [ReportController::class, 'index'])->name('report');
     Route::post('/report/generate', [ReportController::class, 'generate'])->name('report.generate');
     Route::get('/report/download/{id}', [ReportController::class, 'download'])->name('report.download');
+    Route::get('/report/view/{id}', [ReportController::class, 'view'])->name('report.view');
     
     // Settings - Static page
     Route::get('/settings', function () { 
         return view('settings'); 
     })->name('settings');
     
-    // Reservations - Accessible to all authenticated users
+    // =============================================================================
+    // RESERVATIONS ROUTES - AUTHENTICATED USERS ONLY
+    // =============================================================================
     Route::prefix('reservations')->group(function () {
         // IMAGE ROUTE - ADD THIS
         Route::get('/room-images/{filename}', function ($filename) {
@@ -94,19 +120,26 @@ Route::middleware('auth')->group(function () {
             return response()->file($path);
         })->name('reservations.room-images');
         
+        // Main reservation routes
         Route::get('/', [ReservationController::class, 'index'])->name('reservations.index');
         Route::get('/create', [ReservationController::class, 'create'])->name('reservations.create');
         Route::post('/', [ReservationController::class, 'store'])->name('reservations.store');
+        Route::get('/{reservation}', [ReservationController::class, 'show'])->name('reservations.show');
         Route::get('/{reservation}/edit', [ReservationController::class, 'edit'])->name('reservations.edit');
         Route::put('/{reservation}', [ReservationController::class, 'update'])->name('reservations.update');
         Route::delete('/{reservation}', [ReservationController::class, 'destroy'])->name('reservations.destroy');
-        Route::get('/{reservation}', [ReservationController::class, 'show'])->name('reservations.show');
         Route::post('/confirm/{reservation}', [ReservationController::class, 'confirm'])->name('reservations.confirm');
+        
+        // Payment details
+        Route::get('/{reservation}/payment-details', [ReservationController::class, 'getPaymentDetails'])->name('reservations.payment-details');
         
         // AJAX routes for booking wizard
         Route::post('/available-rooms', [ReservationController::class, 'getAvailableRooms'])->name('reservations.available-rooms');
         Route::post('/hold-rooms', [ReservationController::class, 'holdRooms'])->name('reservations.hold-rooms');
         Route::post('/check-availability', [ReservationController::class, 'checkAvailability'])->name('reservations.check-availability');
+        
+        // EMAIL VALIDATION ROUTE - ADDED HERE
+        Route::post('/check-email', [ReservationController::class, 'checkEmail'])->name('reservations.check-email');
         
         // Simple bookings route that redirects to reservations
         Route::get('/bookings', function (Request $request) {
@@ -167,6 +200,7 @@ Route::middleware('auth')->group(function () {
             Route::get('/receptionist/rooms', [RoomsController::class, 'index'])->name('admin.receptionist.rooms');
             Route::get('/receptionist/guests', [TransactionController::class, 'index'])->name('admin.receptionist.guests');
             Route::get('/receptionist/report', [ReportController::class, 'index'])->name('admin.receptionist.report');
+            Route::get('/receptionist/reports', [ReportController::class, 'index'])->name('admin.receptionist.reports');
             Route::get('/receptionist/settings', function () { 
                 return view('settings'); 
             })->name('admin.receptionist.settings');
@@ -193,19 +227,26 @@ Route::middleware('auth')->group(function () {
                 return response()->file($path);
             })->name('receptionist.reservations.room-images');
             
+            // Main reservation routes for receptionist
             Route::get('/', [ReservationController::class, 'index'])->name('receptionist.reservations');
             Route::get('/create', [ReservationController::class, 'create'])->name('receptionist.reservations.create');
             Route::post('/', [ReservationController::class, 'store'])->name('receptionist.reservations.store');
+            Route::get('/{reservation}', [ReservationController::class, 'show'])->name('receptionist.reservations.show');
             Route::get('/{reservation}/edit', [ReservationController::class, 'edit'])->name('receptionist.reservations.edit');
             Route::put('/{reservation}', [ReservationController::class, 'update'])->name('receptionist.reservations.update');
             Route::delete('/{reservation}', [ReservationController::class, 'destroy'])->name('receptionist.reservations.destroy');
-            Route::get('/{reservation}', [ReservationController::class, 'show'])->name('receptionist.reservations.show');
             Route::post('/confirm/{reservation}', [ReservationController::class, 'confirm'])->name('receptionist.reservations.confirm');
             
+            // Payment details for receptionist
+            Route::get('/{reservation}/payment-details', [ReservationController::class, 'getPaymentDetails'])->name('receptionist.reservations.payment-details');
+            
             // AJAX routes for receptionist booking wizard
-            Route::post('/available-rooms', [ReservationController::class, 'getAvailableRooms'])->name('receptionist.reservations.available-rooms');
+            Route::post('/get-available-rooms', [ReservationController::class, 'getAvailableRooms'])->name('receptionist.reservations.get-available-rooms');
             Route::post('/hold-rooms', [ReservationController::class, 'holdRooms'])->name('receptionist.reservations.hold-rooms');
             Route::post('/check-availability', [ReservationController::class, 'checkAvailability'])->name('receptionist.reservations.check-availability');
+            
+            // EMAIL VALIDATION ROUTE FOR RECEPTIONIST - ADDED HERE
+            Route::post('/check-email', [ReservationController::class, 'checkEmail'])->name('receptionist.reservations.check-email');
             
             // Simple bookings route for receptionist
             Route::get('/bookings', function (Request $request) {
@@ -223,6 +264,14 @@ Route::middleware('auth')->group(function () {
             Route::put('/{room}', [RoomsController::class, 'update'])->name('receptionist.rooms.update');
             Route::delete('/{room}', [RoomsController::class, 'destroy'])->name('receptionist.rooms.destroy');
             Route::get('/{room}', [RoomsController::class, 'show'])->name('receptionist.rooms.show');
+        });
+
+        // Receptionist Reports
+        Route::prefix('receptionist/reports')->group(function () {
+            Route::get('/', [ReportController::class, 'index'])->name('receptionist.reports');
+            Route::post('/generate', [ReportController::class, 'generate'])->name('receptionist.reports.generate');
+            Route::get('/download/{id}', [ReportController::class, 'download'])->name('receptionist.reports.download');
+            Route::get('/view/{id}', [ReportController::class, 'view'])->name('receptionist.reports.view');
         });
 
         // Receptionist other pages
@@ -252,6 +301,31 @@ Route::middleware('auth')->group(function () {
         ]);
     });
     
+    Route::get('/test-pdf-generation', function() {
+        try {
+            $pdf = Pdf::loadView('reports.pdf', [
+                'reportType' => 'revenue',
+                'reportName' => 'Test Revenue Report',
+                'startDate' => now()->subDays(30),
+                'endDate' => now(),
+                'reportData' => [
+                    'totalRevenue' => 50000,
+                    'roomRevenue' => 45000,
+                    'otherRevenue' => 5000,
+                    'totalBookings' => 25,
+                    'revenueGrowth' => 12.5
+                ],
+                'logoPath' => 'images/logo.png'
+            ]);
+            
+            return $pdf->stream('test-report.pdf');
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+        }
+    })->name('test.pdf');
 
     Route::get('/debug-admin', function () {
         $user = auth()->user();
@@ -283,9 +357,57 @@ Route::middleware('auth')->group(function () {
             'role' => $user->role,
             'is_active' => $user->is_active,
             'is_admin' => $user->role === 'admin',
+            'is_receptionist' => $user->role === 'receptionist',
             'session_data' => session()->all()
         ]);
     });
+    
+    // Test report routes
+    Route::get('/test/report-data/{type}', function($type) {
+        $controller = new ReportController();
+        $startDate = now()->subDays(30);
+        $endDate = now();
+        
+        try {
+            $data = $controller->generateReportData($type, $startDate, $endDate);
+            
+            return response()->json([
+                'success' => true,
+                'report_type' => $type,
+                'data' => $data,
+                'date_range' => $startDate->format('Y-m-d') . ' to ' . $endDate->format('Y-m-d')
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+        }
+    });
+});
+
+// =============================================================================
+// PUBLIC REPORT ROUTES (for shared reports via link)
+// =============================================================================
+Route::prefix('public')->group(function () {
+    Route::get('/report/{id}/{token}', [ReportController::class, 'publicView'])
+        ->name('reports.public.view')
+        ->middleware('throttle:60,1');
+    
+    Route::get('/report/download/{id}/{token}', [ReportController::class, 'publicDownload'])
+        ->name('reports.public.download')
+        ->middleware('throttle:30,1');
+});
+
+// =============================================================================
+// API ROUTES FOR AJAX REPORT GENERATION
+// =============================================================================
+Route::prefix('api')->middleware(['auth', 'throttle:60,1'])->group(function () {
+    Route::get('/report/preview', [ReportController::class, 'previewReport'])->name('api.report.preview');
+    Route::post('/report/generate-async', [ReportController::class, 'generateAsync'])->name('api.report.generate-async');
+    Route::get('/report/status/{jobId}', [ReportController::class, 'checkGenerationStatus'])->name('api.report.status');
+    Route::get('/reports/list', [ReportController::class, 'listReports'])->name('api.reports.list');
 });
 
 // =============================================================================

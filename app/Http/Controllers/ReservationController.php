@@ -184,7 +184,52 @@ class ReservationController extends Controller
         }
     }
 
-    // Create reservation with multiple rooms - ONLY ADD EMAIL HERE
+    // Check email availability and name conflict
+    public function checkEmail(Request $request)
+    {
+        $request->validate([
+            'email' => 'required|email',
+            'first_name' => 'nullable|string',
+            'last_name' => 'nullable|string'
+        ]);
+        
+        $existingGuest = Guest::where('email', $request->email)->first();
+        
+        if ($existingGuest) {
+            $existingName = $existingGuest->first_name . ' ' . $existingGuest->last_name;
+            
+            // If name is provided in the request, check if it matches
+            if ($request->has('first_name') && $request->has('last_name')) {
+                $newName = $request->first_name . ' ' . $request->last_name;
+                
+                if (strtolower(trim($existingName)) !== strtolower(trim($newName))) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Email conflict detected',
+                        'conflict' => true,
+                        'existing_guest' => [
+                            'name' => $existingName,
+                            'id' => $existingGuest->guest_id
+                        ],
+                        'error_message' => 'This email is already registered. Please use different one '
+                    ]);
+                }
+            }
+            
+            return response()->json([
+                'success' => true,
+                'exists' => true,
+                'guest_name' => $existingName
+            ]);
+        }
+        
+        return response()->json([
+            'success' => true,
+            'exists' => false
+        ]);
+    }
+
+    // Create reservation with multiple rooms
     public function store(Request $request)
     {
         $request->validate([
@@ -202,18 +247,53 @@ class ReservationController extends Controller
             'total_amount' => 'required|numeric|min:0'
         ]);
 
+        // ADD EMAIL VALIDATION CHECK
+        $existingGuest = Guest::where('email', $request->email)->first();
+        
+        if ($existingGuest) {
+            // Check if the name matches the existing guest
+            $existingName = strtolower(trim($existingGuest->first_name . ' ' . $existingGuest->last_name));
+            $newName = strtolower(trim($request->first_name . ' ' . $request->last_name));
+            
+            if ($existingName !== $newName) {
+                // Names don't match - return validation error
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Email already registered to a different person',
+                    'errors' => [
+                        'email' => [
+                            'This email is already registered to ' . 
+                            $existingGuest->first_name . ' ' . $existingGuest->last_name . 
+                            '. Please use a different email or verify the name.'
+                        ]
+                    ]
+                ], 422);
+            }
+        }
+
         DB::beginTransaction();
         try {
-            // Create or find guest
-            $guest = Guest::firstOrCreate(
-                ['email' => $request->email],
-                [
+            // If email exists with same name, use existing guest
+            if ($existingGuest && 
+                strtolower(trim($existingGuest->first_name)) === strtolower(trim($request->first_name)) &&
+                strtolower(trim($existingGuest->last_name)) === strtolower(trim($request->last_name))) {
+                
+                $guest = $existingGuest;
+                
+                // Update contact number if changed
+                if ($guest->contact_number !== $request->contact_number) {
+                    $guest->update(['contact_number' => $request->contact_number]);
+                }
+            } else {
+                // Create new guest
+                $guest = Guest::create([
                     'first_name' => $request->first_name,
                     'last_name' => $request->last_name,
+                    'email' => $request->email,
                     'contact_number' => $request->contact_number,
                     'guest_type' => 'walk-in'
-                ]
-            );
+                ]);
+            }
 
             // Calculate total nights
             $checkIn = Carbon::parse($request->check_in_date);
@@ -275,12 +355,16 @@ class ReservationController extends Controller
                 'message' => 'Reservation created successfully!' . ($emailSent ? ' Email sent.' : ''),
                 'reservation_id' => $reservation->reservation_id,
                 'booking_id' => $booking->booking_id,
-                'rooms_booked' => $rooms->count()
+                'rooms_booked' => $rooms->count(),
+                'guest_name' => $guest->first_name . ' ' . $guest->last_name,
+                'email' => $guest->email
             ]);
 
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Reservation creation failed: ' . $e->getMessage());
+            Log::error($e->getTraceAsString());
+            
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to create reservation: ' . $e->getMessage()
@@ -305,15 +389,65 @@ class ReservationController extends Controller
             'special_requests' => 'nullable|string'
         ]);
 
+        // Check if email is being changed to one that belongs to a different guest
+        if ($request->email !== $reservation->guest->email) {
+            $existingGuest = Guest::where('email', $request->email)->first();
+            
+            if ($existingGuest && $existingGuest->guest_id !== $reservation->guest_id) {
+                $existingName = strtolower(trim($existingGuest->first_name . ' ' . $existingGuest->last_name));
+                $newName = strtolower(trim($request->first_name . ' ' . $request->last_name));
+                
+                if ($existingName !== $newName) {
+                    return back()->withErrors([
+                        'email' => 'This email is already registered to ' . 
+                                  $existingGuest->first_name . ' ' . $existingGuest->last_name
+                    ]);
+                }
+            }
+        }
+
         DB::beginTransaction();
         try {
-            // Update guest information
-            $reservation->guest->update([
-                'first_name' => $request->first_name,
-                'last_name' => $request->last_name,
-                'email' => $request->email,
-                'contact_number' => $request->contact_number
-            ]);
+            // Check if guest details match existing record or need update
+            $guest = $reservation->guest;
+            
+            if ($request->email === $guest->email && 
+                strtolower(trim($request->first_name)) === strtolower(trim($guest->first_name)) &&
+                strtolower(trim($request->last_name)) === strtolower(trim($guest->last_name))) {
+                
+                // Same guest, just update contact number if changed
+                if ($guest->contact_number !== $request->contact_number) {
+                    $guest->update(['contact_number' => $request->contact_number]);
+                }
+            } else {
+                // Different name or email - need to find or create new guest
+                $existingGuest = Guest::where('email', $request->email)->first();
+                
+                if ($existingGuest && 
+                    strtolower(trim($existingGuest->first_name)) === strtolower(trim($request->first_name)) &&
+                    strtolower(trim($existingGuest->last_name)) === strtolower(trim($request->last_name))) {
+                    
+                    // Update existing guest with new contact number
+                    $existingGuest->update([
+                        'contact_number' => $request->contact_number
+                    ]);
+                    
+                    // Update reservation to use this guest
+                    $reservation->update(['guest_id' => $existingGuest->guest_id]);
+                } else {
+                    // Create new guest
+                    $newGuest = Guest::create([
+                        'first_name' => $request->first_name,
+                        'last_name' => $request->last_name,
+                        'email' => $request->email,
+                        'contact_number' => $request->contact_number,
+                        'guest_type' => $guest->guest_type // Preserve guest type
+                    ]);
+                    
+                    // Update reservation to use new guest
+                    $reservation->update(['guest_id' => $newGuest->guest_id]);
+                }
+            }
 
             // Update reservation
             $reservation->update([

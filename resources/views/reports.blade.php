@@ -14,6 +14,24 @@
             @if(session('success'))
                 <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-6">
                     {{ session('success') }}
+                    @if(session('download_url'))
+                        <div class="mt-2">
+                            <a href="{{ session('download_url') }}" class="text-blue-600 hover:text-blue-800 font-medium">
+                                <svg class="h-4 w-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                </svg>
+                                Download Report
+                            </a>
+                            <span class="mx-2">|</span>
+                            <a href="{{ session('view_url') }}" target="_blank" class="text-green-600 hover:text-green-800 font-medium">
+                                <svg class="h-4 w-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                                </svg>
+                                View Report
+                            </a>
+                        </div>
+                    @endif
                 </div>
             @endif
 
@@ -26,9 +44,8 @@
             <div class="flex items-center justify-between mb-6">
                 <div>
                     <h2 class="text-xl font-semibold mb-1">Reports</h2>
-                    <p class="text-gray-500 text-sm">Last 30 days • {{ $recentReportsCount }} reports generated</p>
+                    <p class="text-gray-500 text-sm">Last 30 days • {{ $recentReports->total() ?? 0 }} reports generated</p>
                 </div>
-                
             </div>
 
             <!-- Metrics Cards -->
@@ -113,7 +130,7 @@
                                 <option value="revenue">Revenue Report</option>
                                 <option value="occupancy">Occupancy Report</option>
                                 <option value="guest">Guest Report</option>
-                                <option value="financial">Financial Report</option>
+                              
                             </select>
                         </div>
                         <div>
@@ -168,15 +185,21 @@
                 </div>
             </div>
 
-            <!-- Recent Reports -->
+            <!-- Recent Reports Section with Pagination -->
             <div class="bg-white rounded-lg shadow overflow-hidden">
-                <div class="p-6 border-b">
+                <div class="p-6 border-b flex justify-between items-center">
                     <h3 class="text-lg font-semibold flex items-center">
                         <svg class="h-5 w-5 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                         Recent Reports
                     </h3>
+                    
+                    @if($recentReports->total() > 0)
+                    <div class="text-sm text-gray-500">
+                        Showing {{ $recentReports->firstItem() }} to {{ $recentReports->lastItem() }} of {{ $recentReports->total() }} reports
+                    </div>
+                    @endif
                 </div>
                 
                 <div class="overflow-x-auto">
@@ -195,26 +218,175 @@
                                 @foreach($recentReports as $report)
                                 <tr class="hover:bg-gray-50">
                                     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ $report->name }}</td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ ucfirst($report->type) }}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
+                                            @if($report->type == 'revenue') bg-green-100 text-green-800
+                                            @elseif($report->type == 'occupancy') bg-blue-100 text-blue-800
+                                            @elseif($report->type == 'guest') bg-purple-100 text-purple-800
+                                            @else bg-gray-100 text-gray-800
+                                            @endif">
+                                            {{ ucfirst($report->type) }}
+                                        </span>
+                                    </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ $report->start_date->format('M j') }} - {{ $report->end_date->format('M j, Y') }}</td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ $report->created_at->diffForHumans() }}</td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                        <a href="{{ route('report.download', $report->id) }}" class="text-blue-600 hover:text-blue-900 mr-3">Download</a>
+                                        <div class="flex space-x-2">
+                                            <a href="{{ route('report.download', $report->id) }}" 
+                                               class="text-blue-600 hover:text-blue-900 inline-flex items-center"
+                                               title="Download PDF">
+                                                <svg class="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                                </svg>
+                                                Download
+                                            </a>
+                                            <a href="{{ route('report.view', $report->id) }}" 
+                                               target="_blank"
+                                               class="text-green-600 hover:text-green-900 inline-flex items-center"
+                                               title="View in Browser">
+                                                <svg class="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                                                </svg>
+                                                View
+                                            </a>
+                                        </div>
                                     </td>
                                 </tr>
                                 @endforeach
                             @else
                                 <tr>
-                                    <td colspan="5" class="px-6 py-4 text-center text-sm text-gray-500">
-                                        No reports generated yet.
+                                    <td colspan="5" class="px-6 py-8 text-center">
+                                        <div class="flex flex-col items-center justify-center text-gray-400">
+                                            <svg class="h-12 w-12 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                            </svg>
+                                            <p class="text-lg font-medium text-gray-500 mb-1">No reports generated yet</p>
+                                            <p class="text-sm">Generate your first report using the form above</p>
+                                        </div>
                                     </td>
                                 </tr>
                             @endif
                         </tbody>
                     </table>
                 </div>
+                
+                <!-- Pagination -->
+                @if($recentReports->hasPages())
+                <div class="px-6 py-4 border-t bg-gray-50">
+                    <div class="flex items-center justify-between">
+                        <div class="text-sm text-gray-700">
+                            Page {{ $recentReports->currentPage() }} of {{ $recentReports->lastPage() }}
+                        </div>
+                        <div class="flex space-x-2">
+                            <!-- Previous Page Button -->
+                            @if($recentReports->onFirstPage())
+                                <span class="px-3 py-1 bg-gray-200 text-gray-500 rounded cursor-not-allowed">
+                                    <svg class="h-4 w-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                                    </svg>
+                                    Previous
+                                </span>
+                            @else
+                                <a href="{{ $recentReports->previousPageUrl() }}" class="px-3 py-1 bg-white border border-gray-300 text-gray-700 rounded hover:bg-gray-50 hover:border-gray-400">
+                                    <svg class="h-4 w-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                                    </svg>
+                                    Previous
+                                </a>
+                            @endif
+
+                            <!-- Page Numbers -->
+                            <div class="flex space-x-1">
+                                @foreach($recentReports->getUrlRange(1, $recentReports->lastPage()) as $page => $url)
+                                    @if($page == $recentReports->currentPage())
+                                        <span class="px-3 py-1 bg-blue-600 text-white rounded">{{ $page }}</span>
+                                    @elseif($page >= $recentReports->currentPage() - 2 && $page <= $recentReports->currentPage() + 2)
+                                        <a href="{{ $url }}" class="px-3 py-1 bg-white border border-gray-300 text-gray-700 rounded hover:bg-gray-50 hover:border-gray-400">{{ $page }}</a>
+                                    @elseif($page == 1)
+                                        <a href="{{ $url }}" class="px-3 py-1 bg-white border border-gray-300 text-gray-700 rounded hover:bg-gray-50 hover:border-gray-400">1</a>
+                                        @if($recentReports->currentPage() > 4)
+                                            <span class="px-2 py-1 text-gray-500">...</span>
+                                        @endif
+                                    @elseif($page == $recentReports->lastPage())
+                                        @if($recentReports->currentPage() < $recentReports->lastPage() - 3)
+                                            <span class="px-2 py-1 text-gray-500">...</span>
+                                        @endif
+                                        <a href="{{ $url }}" class="px-3 py-1 bg-white border border-gray-300 text-gray-700 rounded hover:bg-gray-50 hover:border-gray-400">{{ $page }}</a>
+                                    @endif
+                                @endforeach
+                            </div>
+
+                            <!-- Next Page Button -->
+                            @if($recentReports->hasMorePages())
+                                <a href="{{ $recentReports->nextPageUrl() }}" class="px-3 py-1 bg-white border border-gray-300 text-gray-700 rounded hover:bg-gray-50 hover:border-gray-400">
+                                    Next
+                                    <svg class="h-4 w-4 inline ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                                    </svg>
+                                </a>
+                            @else
+                                <span class="px-3 py-1 bg-gray-200 text-gray-500 rounded cursor-not-allowed">
+                                    Next
+                                    <svg class="h-4 w-4 inline ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                                    </svg>
+                                </span>
+                            @endif
+                        </div>
+                    </div>
+                </div>
+                @endif
             </div>
         </div>
     </main>
 </div>
+
+<!-- Add SweetAlert2 CDN -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+@if(session('success'))
+<script>
+    Swal.fire({
+        icon: 'success',
+        title: 'Success!',
+        text: '{{ session('success') }}',
+        showConfirmButton: true,
+        timer: 3000
+    });
+</script>
+@endif
+
+@if(session('error'))
+<script>
+    Swal.fire({
+        icon: 'error',
+        title: 'Error!',
+        text: '{{ session('error') }}',
+        showConfirmButton: true
+    });
+</script>
+@endif
+
+<script>
+// Handle report download with loading indicator
+document.addEventListener('DOMContentLoaded', function() {
+    // Download buttons
+    const downloadButtons = document.querySelectorAll('a[href*="download"]');
+    
+    downloadButtons.forEach(button => {
+        button.addEventListener('click', function(e) {
+            const originalHTML = this.innerHTML;
+            this.innerHTML = '<svg class="animate-spin h-4 w-4 inline mr-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Downloading...';
+            this.style.pointerEvents = 'none';
+            
+            // Reset button after 5 seconds if download doesn't start
+            setTimeout(() => {
+                this.innerHTML = originalHTML;
+                this.style.pointerEvents = 'auto';
+            }, 5000);
+        });
+    });
+});
+</script>
 @endsection

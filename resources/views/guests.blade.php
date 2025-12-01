@@ -35,21 +35,6 @@
                 <div class="bg-white rounded-lg shadow p-6">
                     <div class="flex items-center justify-between">
                         <div>
-                            <p class="text-sm text-gray-500 mb-1">Pending Payments</p>
-                            <h3 class="text-2xl font-bold text-gray-800">₱{{ number_format($pendingAmount, 2) }}</h3>
-                            <p class="text-xs text-yellow-600 mt-1">{{ $pendingCount }} transactions</p>
-                        </div>
-                        <div class="bg-yellow-100 p-3 rounded-full">
-                            <svg class="h-6 w-6 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="bg-white rounded-lg shadow p-6">
-                    <div class="flex items-center justify-between">
-                        <div>
                             <p class="text-sm text-gray-500 mb-1">Completed Today</p>
                             <h3 class="text-2xl font-bold text-gray-800">₱{{ number_format($todayRevenue, 2) }}</h3>
                             <p class="text-xs text-green-600 mt-1">{{ $todayCount }} payments</p>
@@ -65,7 +50,7 @@
                 <div class="bg-white rounded-lg shadow p-6">
                     <div class="flex items-center justify-between">
                         <div>
-                            <p class="text-sm text-gray-500 mb-1">Failed/Refunded</p>
+                            <p class="text-sm text-gray-500 mb-1">Refunded</p>
                             <h3 class="text-2xl font-bold text-gray-800">₱{{ number_format($failedAmount, 2) }}</h3>
                             <p class="text-xs text-red-600 mt-1">{{ $failedCount }} transactions</p>
                         </div>
@@ -82,7 +67,6 @@
             <div class="flex items-center justify-between mb-6">
                 <div class="flex items-center space-x-3 flex-1">
                     <form method="GET" action="{{ route('guests') }}" class="flex items-center space-x-3 flex-1">
-                        
                         <input type="text" name="search" value="{{ request('search') }}" placeholder="Search by guest name, room, or transaction ID..." class="flex-1 max-w-md px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                         @if(request()->hasAny(['search', 'status', 'method']))
                             <a href="{{ route('guests') }}" class="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500">
@@ -95,8 +79,6 @@
                         <select name="status" class="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" onchange="this.form.submit()">
                             <option value="">All Status</option>
                             <option value="completed" {{ request('status') == 'completed' ? 'selected' : '' }}>Completed</option>
-                            <option value="pending" {{ request('status') == 'pending' ? 'selected' : '' }}>Pending</option>
-                            <option value="failed" {{ request('status') == 'failed' ? 'selected' : '' }}>Failed</option>
                             <option value="refunded" {{ request('status') == 'refunded' ? 'selected' : '' }}>Refunded</option>
                         </select>
                         <select name="method" class="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" onchange="this.form.submit()">
@@ -107,8 +89,6 @@
                             <option value="gcash" {{ request('method') == 'gcash' ? 'selected' : '' }}>GCash</option>
                             <option value="paymaya" {{ request('method') == 'paymaya' ? 'selected' : '' }}>PayMaya</option>
                         </select>
-                        
-                       
                     </form>
                 </div>
             </div>
@@ -125,14 +105,30 @@
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment Method</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date & Time</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                         </tr>
                     </thead>
                     <tbody class="bg-white divide-y divide-gray-200">
                         @forelse($transactions as $transaction)
                         <tr class="hover:bg-gray-50">
                             <td class="px-6 py-4 whitespace-nowrap">
-                                <div class="text-sm font-medium text-gray-900">#{{ $transaction->transaction_id ?? 'N/A' }}</div>
+                                <div class="flex flex-col">
+                                    <!-- Masked ID for display -->
+                                    <div class="text-sm font-medium text-gray-900">
+                                        @if($transaction->transaction_id)
+                                            @php
+                                                $transactionId = (string) $transaction->transaction_id;
+                                                $maskedId = substr($transactionId, 0, 4) . str_repeat('*', max(0, strlen($transactionId) - 8)) . substr($transactionId, -4);
+                                            @endphp
+                                            #{{ $maskedId }}
+                                        @else
+                                            #N/A
+                                        @endif
+                                    </div>
+                                    <!-- Full ID for admin (shown on hover or with permission) -->
+                                    <div class="text-xs text-gray-500 mt-1 hidden admin-view" data-full-id="{{ $transaction->transaction_id ?? 'N/A' }}">
+                                        Full ID: #{{ $transaction->transaction_id ?? 'N/A' }}
+                                    </div>
+                                </div>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <div class="flex items-center">
@@ -195,16 +191,6 @@
                                             Completed
                                         </span>
                                         @break
-                                    @case('pending')
-                                        <span class="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
-                                            Pending
-                                        </span>
-                                        @break
-                                    @case('failed')
-                                        <span class="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
-                                            Failed
-                                        </span>
-                                        @break
                                     @case('refunded')
                                         <span class="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">
                                             Refunded
@@ -216,23 +202,10 @@
                                         </span>
                                 @endswitch
                             </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                <button class="text-blue-600 hover:text-blue-900 mr-3 view-details" title="View Details" data-transaction-id="{{ $transaction->payment_id }}">
-                                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                    </svg>
-                                </button>
-                                <button class="text-green-600 hover:text-green-900 print-receipt" title="Print Receipt" data-transaction-id="{{ $transaction->payment_id }}">
-                                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-                                    </svg>
-                                </button>
-                            </td>
                         </tr>
                         @empty
                         <tr>
-                            <td colspan="8" class="px-6 py-4 text-center text-sm text-gray-500">
+                            <td colspan="7" class="px-6 py-4 text-center text-sm text-gray-500">
                                 No transactions found.
                             </td>
                         </tr>
@@ -267,7 +240,7 @@
                     <div class="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
                         <div>
                             <p class="text-sm text-gray-700">
-                                Showing <span class="font-medium">{{ $transactions->firstItem() }}</span> to <span class="font-medium">{{ $transactions->lastItem() }}</span> of{' '}
+                                Showing <span class="font-medium">{{ $transactions->firstItem() }}</span> to <span class="font-medium">{{ $transactions->lastItem() }}</span>
                                 <span class="font-medium">{{ $transactions->total() }}</span> transactions
                             </p>
                         </div>
@@ -326,29 +299,26 @@
     </main>
 </div>
 
-<!-- JavaScript for buttons -->
+<!-- JavaScript for showing full ID on hover for admins -->
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // View details functionality
-    document.querySelectorAll('.view-details').forEach(button => {
-        button.addEventListener('click', function() {
-            const transactionId = this.getAttribute('data-transaction-id');
-            // Show transaction details modal or redirect to details page
-            alert('View details for transaction ID: ' + transactionId);
-            // You can implement a modal here or redirect to a details page
-            // window.location.href = '/transactions/' + transactionId;
-        });
-    });
-    
-    // Print receipt functionality
-    document.querySelectorAll('.print-receipt').forEach(button => {
-        button.addEventListener('click', function() {
-            const transactionId = this.getAttribute('data-transaction-id');
-            // Generate and print receipt
-            alert('Print receipt for transaction ID: ' + transactionId);
-            // You can implement receipt generation here
-            // window.open('/transactions/' + transactionId + '/receipt', '_blank');
-        });
+    // Show full transaction ID on hover for admins
+    const transactionCells = document.querySelectorAll('td:first-child');
+    transactionCells.forEach(cell => {
+        const adminView = cell.querySelector('.admin-view');
+        if (adminView) {
+            cell.addEventListener('mouseenter', function() {
+                // Check if user is admin
+                const isAdmin = {{ auth()->user() && auth()->user()->role === 'admin' ? 'true' : 'false' }};
+                if (isAdmin) {
+                    adminView.classList.remove('hidden');
+                }
+            });
+            
+            cell.addEventListener('mouseleave', function() {
+                adminView.classList.add('hidden');
+            });
+        }
     });
 });
 </script>
