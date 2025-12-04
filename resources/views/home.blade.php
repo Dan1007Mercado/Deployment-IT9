@@ -1,1109 +1,1279 @@
-@extends('layouts.app')
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>{{ $title ?? 'Azure Grand Hotel - Luxury Accommodation' }}</title>
+    
+    {{-- Tailwind CSS --}}
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    {{-- Lucide Icons --}}
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    {{-- Custom Styles --}}
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        * {
+            font-family: 'Inter', sans-serif;
+        }
+        
+        .animate-fade-in {
+            animation: fadeIn 1s ease-out;
+        }
+        
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .hover-lift {
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        
+        .hover-lift:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+        
+        /* Custom scrollbar */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 3px;
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        
+        /* Smooth scroll behavior */
+        html {
+            scroll-behavior: smooth;
+        }
+        
+        /* Scroll animation */
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .animate-slide-up {
+            animation: slideUp 0.6s ease-out forwards;
+        }
+        
+        /* Toast notifications */
+        .toast {
+            animation: slideInRight 0.3s ease-out;
+        }
+        
+        @keyframes slideInRight {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
 
-@section('content')
-<div class="min-h-screen bg-gradient-to-b from-blue-50 to-white">
-    <!-- Hero Section -->
-    <div class="relative bg-gradient-to-r from-blue-600 to-blue-800 text-white">
-        <div class="absolute inset-0 bg-black opacity-20"></div>
-        <div class="container mx-auto px-6 py-24 relative">
-            <div class="max-w-3xl">
-                <h1 class="text-5xl font-bold mb-6 leading-tight">
-                    Experience Luxury & Comfort
+        /* Room selection styles */
+        .room-checkbox:checked + .room-card-content {
+            border-color: #10b981;
+            background-color: #f0fdf4;
+        }
+
+        .room-checkbox {
+            position: absolute;
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+    </style>
+</head>
+<body class="min-h-screen bg-gray-50 text-gray-900">
+    {{-- Main Content --}}
+    <main>
+        {{-- Hero Section --}}
+        <section class="relative h-[70vh] min-h-[500px] flex items-center justify-center overflow-hidden">
+            <div class="absolute inset-0 bg-cover bg-center" style="background-image: url('{{ asset('images/hero-hotel.jpg') }}')">
+                <div class="absolute inset-0 bg-gradient-to-r from-blue-900/95 to-blue-800/70"></div>
+            </div>
+            
+            <div class="relative z-10 text-center px-4 max-w-4xl mx-auto">
+                <h1 class="text-4xl md:text-6xl font-bold text-white mb-6 animate-fade-in">
+                    Welcome to Azure Grand Hotel
                 </h1>
-                <p class="text-xl mb-8 text-blue-100">
-                    Discover our exquisite rooms and suites designed for your ultimate comfort and relaxation.
+                <p class="text-lg md:text-xl text-blue-100 mb-8 max-w-2xl mx-auto">
+                    Experience luxury and comfort in the heart of the city. Book your perfect stay today.
                 </p>
-                <a href="#room-types" 
-                   class="inline-block bg-white text-blue-600 px-8 py-4 rounded-lg font-semibold hover:bg-blue-50 transition-all shadow-lg">
-                    Explore Rooms
+                <a href="#rooms" class="inline-flex items-center justify-center rounded-md text-lg px-8 py-6 bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-lg hover-lift">
+                    Explore Our Rooms
                 </a>
             </div>
-        </div>
-    </div>
+        </section>
 
-    <!-- Room Types Section -->
-    <section id="room-types" class="py-16 bg-white">
-        <div class="container mx-auto px-6">
-            <div class="text-center mb-12">
-                <h2 class="text-4xl font-bold text-gray-800 mb-4">Our Rooms & Suites</h2>
-                <p class="text-gray-600 max-w-2xl mx-auto">
-                    Each room is thoughtfully designed with premium amenities to ensure a memorable stay
-                </p>
-            </div>
+        {{-- Room Types Section --}}
+        <section id="rooms" class="py-16 px-4 bg-gradient-to-b from-white to-blue-50">
+            <div class="max-w-7xl mx-auto">
+                <div class="text-center mb-12">
+                    <h2 class="text-3xl md:text-4xl font-bold text-gray-900 mb-4 animate-slide-up">Our Rooms & Suites</h2>
+                    <p class="text-lg md:text-xl text-gray-600 max-w-2xl mx-auto animate-slide-up" style="animation-delay: 0.2s;">
+                        Each room is thoughtfully designed with premium amenities to ensure a memorable stay
+                    </p>
+                </div>
 
-            <!-- Room Types Grid -->
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                @foreach($roomTypes as $roomType)
-                <div class="bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-200 hover:shadow-xl transition-all duration-300">
-                    <!-- Room Image -->
-                    <div class="h-64 bg-gradient-to-br from-blue-100 to-blue-300 relative">
-                        <!-- You can add dynamic images here later -->
-                        <div class="absolute inset-0 flex items-center justify-center">
-                            <svg class="w-32 h-32 text-blue-200" fill="currentColor" viewBox="0 0 20 20">
-                                <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"/>
-                            </svg>
-                        </div>
-                        <!-- Price Tag -->
-                        <div class="absolute top-4 right-4 bg-white px-4 py-2 rounded-lg shadow-md">
-                            <span class="text-2xl font-bold text-blue-600">₱{{ number_format($roomType->base_price) }}</span>
-                            <span class="text-gray-500 text-sm">/night</span>
-                        </div>
-                    </div>
-
-                    <!-- Room Details -->
-                    <div class="p-6">
-                        <h3 class="text-2xl font-bold text-gray-800 mb-2">{{ $roomType->type_name }}</h3>
-                        <p class="text-gray-600 mb-4">{{ $roomType->description }}</p>
+                {{-- Room Types Grid --}}
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    @php
+                        // Fetch room types from database
+                        $roomTypes = \App\Models\RoomType::all();
+                    @endphp
+                    
+                    @foreach($roomTypes as $roomType)
+                        @php
+                            // Count available rooms for this type
+                            $availableRooms = \App\Models\Room::where('room_type_id', $roomType->room_type_id)
+                                ->where('room_status', 'available')
+                                ->count();
+                        @endphp
                         
-                        <!-- Amenities -->
-                        <div class="mb-4">
-                            <div class="flex items-center text-sm text-gray-500 mb-2">
-                                <svg class="w-5 h-5 mr-2 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
-                                    <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z"/>
-                                </svg>
-                                <span>Capacity: {{ $roomType->capacity }} guests</span>
+                        <div class="overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-200 bg-white rounded-lg hover-lift animate-slide-up" 
+                             style="animation-delay: {{ $loop->index * 0.1 }}s;">
+                            <div class="relative h-56 overflow-hidden">
+                                <div class="w-full h-full bg-gradient-to-br from-blue-100 to-blue-300 flex items-center justify-center">
+                                    <svg class="w-24 h-24 text-blue-200" fill="currentColor" viewBox="0 0 20 20">
+                                        <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"/>
+                                    </svg>
+                                </div>
+                                <!-- Price Tag -->
+                                <div class="absolute top-4 right-4 bg-white px-3 py-1.5 rounded-lg shadow-sm">
+                                    <span class="text-xl font-bold text-blue-600">₱{{ number_format($roomType->base_price) }}</span>
+                                    <span class="text-gray-500 text-xs">/night</span>
+                                </div>
+                                <!-- Type Badge -->
+                                <div class="absolute top-4 left-4 px-3 py-1 rounded-full text-xs font-semibold bg-blue-500 text-white">
+                                    {{ $roomType->type_name }}
+                                </div>
+                                <!-- Available Rooms -->
+                                <div class="absolute bottom-4 left-4 px-3 py-1 rounded-full text-xs font-semibold bg-white/90 text-gray-700">
+                                    {{ $availableRooms }} available
+                                </div>
                             </div>
-                            <div class="flex items-center text-sm text-gray-500">
-                                <svg class="w-5 h-5 mr-2 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd"/>
-                                </svg>
-                                <span>Available Rooms: {{ $roomType->rooms->where('room_status', 'available')->count() }}</span>
+                            
+                            <div class="p-5">
+                                <h3 class="text-xl font-bold mb-2">{{ $roomType->type_name }}</h3>
+                                <div class="flex items-center gap-2 text-sm text-gray-600 mb-3">
+                                    <i data-lucide="users" class="h-4 w-4"></i>
+                                    <span>Up to {{ $roomType->capacity }} guests</span>
+                                </div>
+                                
+                                <p class="text-sm text-gray-600 mb-4 line-clamp-2">{{ $roomType->description }}</p>
+                                
+                                <div class="flex flex-wrap gap-1.5 mb-4">
+                                    <span class="px-2 py-1 rounded-full text-xs font-medium text-gray-800" style="background-color: #C8D5E1;">
+                                        <i data-lucide="wifi" class="h-3 w-3 inline mr-1"></i> WiFi
+                                    </span>
+                                    <span class="px-2 py-1 rounded-full text-xs font-medium text-gray-800" style="background-color: #C8D5E1;">
+                                        <i data-lucide="snowflake" class="h-3 w-3 inline mr-1"></i> AC
+                                    </span>
+                                    @if($roomType->base_price > 3000)
+                                    <span class="px-2 py-1 rounded-full text-xs font-medium text-gray-800" style="background-color: #C8D5E1;">
+                                        <i data-lucide="tv" class="h-3 w-3 inline mr-1"></i> Premium TV
+                                    </span>
+                                    @endif
+                                </div>
+                                
+                                <div class="text-2xl font-bold text-blue-600 mb-4">
+                                    ₱{{ number_format($roomType->base_price) }}
+                                    <span class="text-sm font-normal text-gray-600"> / night</span>
+                                </div>
+                                
+                                <button 
+                                    onclick="startBooking({{ $roomType->room_type_id }})"
+                                    class="w-full inline-flex items-center justify-center rounded-md px-4 py-2.5 bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-sm hover:shadow-md hover-lift text-sm"
+                                >
+                                    <i data-lucide="calendar" class="h-4 w-4 mr-2"></i>
+                                    Book Now
+                                </button>
                             </div>
                         </div>
-
-                        <!-- Action Button -->
-                        <button 
-                            onclick="openBookingModal({{ $roomType->room_type_id }})"
-                            class="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center"
-                            data-room-type-id="{{ $roomType->room_type_id }}"
-                            data-room-type-name="{{ $roomType->type_name }}"
-                            data-room-price="{{ $roomType->base_price }}"
-                            data-room-capacity="{{ $roomType->capacity }}">
-                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
-                            </svg>
-                            Book Now
-                        </button>
-                    </div>
-                </div>
-                @endforeach
-            </div>
-        </div>
-    </section>
-
-    <!-- Features Section -->
-    <section class="py-16 bg-gradient-to-b from-white to-blue-50">
-        <div class="container mx-auto px-6">
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
-                <div class="text-center">
-                    <div class="bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <svg class="w-8 h-8 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
-                            <path d="M10.394 2.08a1 1 0 00-.788 0l-7 3a1 1 0 000 1.84L5.25 8.051a.999.999 0 01.356-.257l4-1.714a1 1 0 11.788 1.838L7.667 9.088l1.94.831a1 1 0 00.787 0l7-3a1 1 0 000-1.838l-7-3zM3.31 9.397L5 10.12v4.102a8.969 8.969 0 00-1.05-.174 1 1 0 01-.89-.89 11.115 11.115 0 01.25-3.762zM9.3 16.573A9.026 9.026 0 007 14.935v-3.957l1.818.78a3 3 0 002.364 0l5.508-2.361a11.026 11.026 0 01.25 3.762 1 1 0 01-.89.89 8.968 8.968 0 00-5.35 2.524 1 1 0 01-1.4 0zM6 18a1 1 0 001-1v-2.065a8.935 8.935 0 00-2-.712V17a1 1 0 001 1z"/>
-                        </svg>
-                    </div>
-                    <h3 class="text-xl font-bold mb-2">Secure Booking</h3>
-                    <p class="text-gray-600">Your reservation is secured with our encrypted booking system</p>
-                </div>
-                <div class="text-center">
-                    <div class="bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <svg class="w-8 h-8 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
-                        </svg>
-                    </div>
-                    <h3 class="text-xl font-bold mb-2">Best Price Guarantee</h3>
-                    <p class="text-gray-600">We guarantee the best rates for our direct bookings</p>
-                </div>
-                <div class="text-center">
-                    <div class="bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <svg class="w-8 h-8 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
-                        </svg>
-                    </div>
-                    <h3 class="text-xl font-bold mb-2">24/7 Support</h3>
-                    <p class="text-gray-600">Our team is available round the clock for assistance</p>
+                    @endforeach
                 </div>
             </div>
-        </div>
-    </section>
-</div>
+        </section>
 
-<!-- Booking Modal -->
-<div id="bookingModal" class="fixed inset-0 z-50 hidden overflow-y-auto">
-    <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-        <!-- Background Overlay -->
-        <div class="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75" onclick="closeBookingModal()"></div>
-        
-        <!-- Modal Container -->
-        <div class="inline-block w-full max-w-4xl my-8 text-left align-middle transition-all transform bg-white rounded-2xl shadow-xl">
-            <!-- Modal Header -->
-            <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-                <h3 class="text-xl font-semibold text-gray-900" id="modal-title">Book Your Stay</h3>
-                <button onclick="closeBookingModal()" class="text-gray-400 hover:text-gray-500">
+        {{-- Other sections remain the same... --}}
+        <!-- ... rest of your sections (about, amenities, contact, etc.) ... -->
+    </main>
+
+    {{-- Toast Container --}}
+    <div id="toast-container" class="fixed top-4 right-4 z-50 space-y-2"></div>
+
+    {{-- Booking Flow Modals --}}
+    
+    <!-- Guest + Dates Modal -->
+    <div id="guestDatesModal" class="hidden fixed inset-0 z-50 bg-black/80" onclick="closeModalOnBackdrop('guestDatesModal')">
+        <div class="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg bg-white rounded-lg shadow-lg p-6 max-h-[90vh] overflow-y-auto custom-scrollbar" onclick="event.stopPropagation()">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-2xl font-bold">Guest Information & Dates</h2>
+                <button onclick="closeModal('guestDatesModal')" class="text-gray-500 hover:text-gray-700">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                     </svg>
                 </button>
             </div>
 
-            <!-- Stepper -->
-            <div class="px-6 py-4 border-b border-gray-200 bg-gray-50">
-                <div class="flex items-center justify-center">
-                    <div class="flex items-center space-x-8">
-                        <div class="flex items-center">
-                            <div id="step-1-indicator" class="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold">1</div>
-                            <span class="ml-2 text-sm font-medium text-gray-700">Dates</span>
-                        </div>
-                        <div class="w-16 h-1 bg-gray-300"></div>
-                        <div class="flex items-center">
-                            <div id="step-2-indicator" class="w-8 h-8 rounded-full bg-gray-300 text-gray-600 flex items-center justify-center font-bold">2</div>
-                            <span class="ml-2 text-sm font-medium text-gray-500">Guest Info</span>
-                        </div>
-                        <div class="w-16 h-1 bg-gray-300"></div>
-                        <div class="flex items-center">
-                            <div id="step-3-indicator" class="w-8 h-8 rounded-full bg-gray-300 text-gray-600 flex items-center justify-center font-bold">3</div>
-                            <span class="ml-2 text-sm font-medium text-gray-500">Payment</span>
-                        </div>
-                        <div class="w-16 h-1 bg-gray-300"></div>
-                        <div class="flex items-center">
-                            <div id="step-4-indicator" class="w-8 h-8 rounded-full bg-gray-300 text-gray-600 flex items-center justify-center font-bold">4</div>
-                            <span class="ml-2 text-sm font-medium text-gray-500">Confirm</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Modal Content -->
-            <div class="px-6 py-6">
-                <!-- Step 1: Dates Selection -->
-                <div id="step-1-content" class="step-content">
-                    <div class="mb-6">
-                        <h4 class="text-lg font-semibold mb-2" id="room-type-selected"></h4>
-                        <div class="text-gray-600">
-                            Price: <span id="room-price-display" class="font-bold text-blue-600"></span> per night
-                        </div>
-                    </div>
-
-                    <form id="dates-form" class="space-y-6">
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div>
-                                <label class="block text-sm font-medium mb-2">Check-in Date *</label>
-                                <input type="date" id="check_in_date" name="check_in_date" 
-                                       min="{{ date('Y-m-d', strtotime('+1 day')) }}"
-                                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium mb-2">Check-out Date *</label>
-                                <input type="date" id="check_out_date" name="check_out_date"
-                                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-                            </div>
-                        </div>
-
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div>
-                                <label class="block text-sm font-medium mb-2">Number of Guests *</label>
-                                <input type="number" id="num_guests" name="num_guests" min="1" max="10" value="2"
-                                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-                                <p class="text-sm text-gray-500 mt-1" id="capacity-info"></p>
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium mb-2">Duration</label>
-                                <div class="px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg">
-                                    <div id="nights-display" class="text-lg font-semibold">Select dates</div>
-                                    <div id="dates-range" class="text-sm text-gray-600"></div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Available Rooms -->
-                        <div id="available-rooms-section" class="hidden">
-                            <label class="block text-sm font-medium mb-4">Select Available Rooms</label>
-                            <div id="available-rooms-list" class="space-y-3 max-h-60 overflow-y-auto p-3 border border-gray-200 rounded-lg">
-                                <!-- Available rooms will be loaded here -->
-                            </div>
-                        </div>
-
-                        <!-- Price Summary -->
-                        <div id="price-summary" class="bg-blue-50 border border-blue-200 rounded-lg p-4 hidden">
-                            <h5 class="font-semibold text-blue-800 mb-2">Price Summary</h5>
-                            <div class="space-y-2">
-                                <div class="flex justify-between">
-                                    <span class="text-gray-600">Room Price per night:</span>
-                                    <span id="room-price-summary" class="font-medium"></span>
-                                </div>
-                                <div class="flex justify-between">
-                                    <span class="text-gray-600">Number of nights:</span>
-                                    <span id="nights-summary" class="font-medium"></span>
-                                </div>
-                                <div class="flex justify-between">
-                                    <span class="text-gray-600">Number of rooms:</span>
-                                    <span id="rooms-count-summary" class="font-medium">0</span>
-                                </div>
-                                <div class="border-t pt-2 mt-2">
-                                    <div class="flex justify-between text-lg font-bold text-blue-700">
-                                        <span>Total Amount:</span>
-                                        <span id="total-amount-summary">₱0.00</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </form>
-
-                    <div class="flex justify-end mt-8">
-                        <button id="next-to-guest" 
-                                onclick="nextStep(2)"
-                                class="px-8 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                disabled>
-                            Next: Guest Information
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Step 2: Guest Information -->
-                <div id="step-2-content" class="step-content hidden">
-                    <h4 class="text-lg font-semibold mb-6">Guest Information</h4>
-                    
-                    <form id="guest-form" class="space-y-6">
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div>
-                                <label class="block text-sm font-medium mb-2">First Name *</label>
-                                <input type="text" id="first_name" name="first_name"
-                                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                       required>
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium mb-2">Last Name *</label>
-                                <input type="text" id="last_name" name="last_name"
-                                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                       required>
-                            </div>
-                        </div>
-
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div>
-                                <label class="block text-sm font-medium mb-2">Email *</label>
-                                <input type="email" id="email" name="email"
-                                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                       required>
-                                <div id="email-validation" class="mt-2 text-sm hidden"></div>
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium mb-2">Contact Number *</label>
-                                <input type="tel" id="contact_number" name="contact_number"
-                                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                       required>
-                            </div>
-                        </div>
-
+            <div class="space-y-6">
+                <!-- Guest Information -->
+                <div>
+                    <h3 class="text-lg font-semibold mb-4">Guest Information</h3>
+                    <div class="grid grid-cols-2 gap-4 mb-4">
                         <div>
-                            <label class="block text-sm font-medium mb-2">Special Requests</label>
-                            <textarea id="special_requests" name="special_requests" rows="3"
-                                      class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                      placeholder="Any special requirements or requests..."></textarea>
+                            <label class="block text-sm font-medium mb-1">First Name *</label>
+                            <input type="text" id="guestFirstName" name="first_name" 
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" required>
                         </div>
-                    </form>
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Last Name *</label>
+                            <input type="text" id="guestLastName" name="last_name" 
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" required>
+                        </div>
+                    </div>
 
-                    <div class="flex justify-between mt-8">
-                        <button onclick="prevStep(1)"
-                                class="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors">
-                            Previous
-                        </button>
-                        <button id="next-to-payment" 
-                                onclick="nextStep(3)"
-                                class="px-8 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors">
-                            Next: Payment
-                        </button>
+                    <div class="relative mb-4">
+                        <label class="block text-sm font-medium mb-1">Email *</label>
+                        <input type="email" id="guestEmail" name="email" 
+                               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+                               required
+                               onblur="validateGuestEmail()">
+                        <div id="guestEmailError" class="text-red-500 text-xs mt-1 hidden"></div>
+                        <div id="guestEmailSuccess" class="text-green-500 text-xs mt-1 hidden"></div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium mb-1">Contact Number *</label>
+                        <input type="tel" id="guestPhone" name="contact_number" 
+                               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" required>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Special Requests (Optional)</label>
+                        <textarea id="guestRequests" name="special_requests" rows="2"
+                                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                  placeholder="Any special requirements..."></textarea>
                     </div>
                 </div>
 
-                <!-- Step 3: Payment -->
-                <div id="step-3-content" class="step-content hidden">
-                    <h4 class="text-lg font-semibold mb-6">Select Payment Method</h4>
-                    
-                    <div class="space-y-4 mb-8">
-                        <!-- Payment Method Selection -->
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div class="border-2 border-transparent rounded-lg p-4 cursor-pointer hover:border-blue-500 payment-method"
-                                 data-method="cash" onclick="selectPaymentMethod('cash')">
-                                <div class="flex items-center">
-                                    <div class="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center mr-4">
-                                        <svg class="w-6 h-6 text-green-600" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fill-rule="evenodd" d="M4 4a2 2 0 00-2 2v4a2 2 0 002 2V6h10a2 2 0 00-2-2H4zm2 6a2 2 0 012-2h8a2 2 0 012 2v4a2 2 0 01-2 2H8a2 2 0 01-2-2v-4zm6 4a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd"/>
-                                        </svg>
-                                    </div>
-                                    <div>
-                                        <h5 class="font-semibold">Pay with Cash</h5>
-                                        <p class="text-sm text-gray-600">Pay at reception</p>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="border-2 border-transparent rounded-lg p-4 cursor-pointer hover:border-blue-500 payment-method"
-                                 data-method="card" onclick="selectPaymentMethod('card')">
-                                <div class="flex items-center">
-                                    <div class="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center mr-4">
-                                        <svg class="w-6 h-6 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
-                                            <path d="M4 4a2 2 0 00-2 2v1h16V6a2 2 0 00-2-2H4z"/>
-                                            <path fill-rule="evenodd" d="M18 9H2v5a2 2 0 002 2h12a2 2 0 002-2V9zM4 13a1 1 0 011-1h1a1 1 0 110 2H5a1 1 0 01-1-1zm5-1a1 1 0 100 2h1a1 1 0 100-2H9z" clip-rule="evenodd"/>
-                                        </svg>
-                                    </div>
-                                    <div>
-                                        <h5 class="font-semibold">Credit/Debit Card</h5>
-                                        <p class="text-sm text-gray-600">Pay with card</p>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="border-2 border-transparent rounded-lg p-4 cursor-pointer hover:border-blue-500 payment-method"
-                                 data-method="online" onclick="selectPaymentMethod('online')">
-                                <div class="flex items-center">
-                                    <div class="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center mr-4">
-                                        <svg class="w-6 h-6 text-purple-600" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM4.332 8.027a6.012 6.012 0 011.912-2.706C6.512 5.73 6.974 6 7.5 6A1.5 1.5 0 019 7.5V8a2 2 0 004 0 2 2 0 011.523-1.943A5.977 5.977 0 0116 10c0 .34-.028.675-.083 1H15a2 2 0 00-2 2v2.197A5.973 5.973 0 0110 16v-2a2 2 0 00-2-2 2 2 0 01-2-2 2 2 0 00-1.668-1.973z" clip-rule="evenodd"/>
-                                        </svg>
-                                    </div>
-                                    <div>
-                                        <h5 class="font-semibold">Online Payment</h5>
-                                        <p class="text-sm text-gray-600">Pay online with Stripe</p>
-                                    </div>
-                                </div>
-                            </div>
+                <!-- Dates Selection -->
+                <div>
+                    <h3 class="text-lg font-semibold mb-4">Stay Details</h3>
+                    <div class="grid grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Check-in Date *</label>
+                            <input type="date" id="checkInDate" name="check_in_date" 
+                                   min="{{ date('Y-m-d', strtotime('+1 day')) }}"
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" required>
                         </div>
-
-                        <!-- Payment Details -->
-                        <div id="payment-details" class="hidden">
-                            <div class="bg-gray-50 border border-gray-200 rounded-lg p-6 mt-4">
-                                <div class="flex justify-between items-center mb-4">
-                                    <h5 class="font-semibold text-gray-700">Payment Summary</h5>
-                                    <div class="text-xl font-bold text-blue-700" id="payment-total">₱0.00</div>
-                                </div>
-                                
-                                <!-- Card Payment Form (hidden by default) -->
-                                <div id="card-payment-form" class="hidden space-y-4">
-                                    <div>
-                                        <label class="block text-sm font-medium mb-2">Card Number</label>
-                                        <input type="text" placeholder="1234 5678 9012 3456" 
-                                               class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-                                    </div>
-                                    <div class="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label class="block text-sm font-medium mb-2">Expiry Date</label>
-                                            <input type="text" placeholder="MM/YY"
-                                                   class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-                                        </div>
-                                        <div>
-                                            <label class="block text-sm font-medium mb-2">CVC</label>
-                                            <input type="text" placeholder="123"
-                                                   class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- Cash Payment Instructions -->
-                                <div id="cash-payment-instructions" class="hidden">
-                                    <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                                        <div class="flex items-center">
-                                            <svg class="w-5 h-5 text-yellow-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                                                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
-                                            </svg>
-                                            <p class="text-yellow-700">
-                                                Please proceed to the reception desk to complete your payment in cash.
-                                                Your reservation will be confirmed upon payment.
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- Online Payment Instructions -->
-                                <div id="online-payment-instructions" class="hidden">
-                                    <div class="bg-purple-50 border border-purple-200 rounded-lg p-4">
-                                        <p class="text-purple-700 mb-4">
-                                            You will be redirected to a secure payment gateway to complete your payment.
-                                        </p>
-                                        <div class="flex items-center text-sm text-purple-600">
-                                            <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                                                <path fill-rule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
-                                            </svg>
-                                            Secure payment powered by Stripe
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Check-out Date *</label>
+                            <input type="date" id="checkOutDate" name="check_out_date" 
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" required>
                         </div>
                     </div>
 
-                    <div class="flex justify-between mt-8">
-                        <button onclick="prevStep(2)"
-                                class="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors">
-                            Previous
-                        </button>
-                        <button id="process-payment" 
-                                onclick="processPayment()"
-                                class="px-8 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-colors hidden">
-                            Process Payment
-                        </button>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Number of Guests *</label>
+                            <input type="number" id="numGuests" name="num_guests" min="1" value="1"
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" required>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Number of Rooms *</label>
+                            <input type="number" id="numRooms" name="num_rooms" min="1" max="5" value="1"
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" required>
+                        </div>
+                    </div>
+
+                    <div class="mt-2">
+                        <label class="block text-sm font-medium mb-1">Nights</label>
+                        <input type="text" id="nightsDisplay" class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50" readonly>
                     </div>
                 </div>
 
-                <!-- Step 4: Confirmation -->
-                <div id="step-4-content" class="step-content hidden">
-                    <div class="text-center mb-8">
-                        <div class="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <svg class="w-10 h-10 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                            </svg>
-                        </div>
-                        <h4 class="text-2xl font-bold text-gray-800 mb-2">Booking Confirmed!</h4>
-                        <p class="text-gray-600">Your reservation has been successfully created</p>
-                    </div>
-
-                    <div class="bg-gray-50 rounded-xl p-6 mb-6">
-                        <div id="confirmation-details" class="space-y-4">
-                            <!-- Details will be populated here -->
-                        </div>
-                    </div>
-
-                    <div class="flex justify-center mt-8">
-                        <button onclick="closeBookingModal()"
-                                class="px-8 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors">
-                            Close
-                        </button>
-                    </div>
+                <div class="flex justify-end pt-4">
+                    <button onclick="checkAvailabilityAndProceed()" 
+                            class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                        Next: Select Rooms
+                    </button>
                 </div>
             </div>
         </div>
     </div>
-</div>
-@endsection
 
-@push('scripts')
-<script>
-// Global variables
-let currentStep = 1;
-let selectedRoomTypeId = null;
-let selectedRoomTypeName = null;
-let selectedRoomPrice = 0;
-let selectedRooms = [];
-let selectedPaymentMethod = null;
-let emailValidated = false;
-
-// Open booking modal
-function openBookingModal(roomTypeId) {
-    const button = document.querySelector(`[data-room-type-id="${roomTypeId}"]`);
-    selectedRoomTypeId = roomTypeId;
-    selectedRoomTypeName = button.dataset.roomTypeName;
-    selectedRoomPrice = parseFloat(button.dataset.roomPrice);
-    const capacity = parseInt(button.dataset.roomCapacity);
-
-    // Update modal title
-    document.getElementById('modal-title').textContent = `Book ${selectedRoomTypeName}`;
-    document.getElementById('room-type-selected').textContent = selectedRoomTypeName;
-    document.getElementById('room-price-display').textContent = `₱${selectedRoomPrice.toLocaleString()}`;
-    document.getElementById('capacity-info').textContent = `Max capacity: ${capacity} guests`;
-
-    // Reset form
-    document.getElementById('dates-form').reset();
-    document.getElementById('guest-form').reset();
-    document.getElementById('num_guests').max = capacity;
-    
-    // Reset steps
-    resetSteps();
-    
-    // Show modal
-    document.getElementById('bookingModal').classList.remove('hidden');
-    document.body.classList.add('overflow-hidden');
-}
-
-// Close booking modal
-function closeBookingModal() {
-    document.getElementById('bookingModal').classList.add('hidden');
-    document.body.classList.remove('overflow-hidden');
-    resetBooking();
-}
-
-// Reset booking data
-function resetBooking() {
-    currentStep = 1;
-    selectedRoomTypeId = null;
-    selectedRoomTypeName = null;
-    selectedRoomPrice = 0;
-    selectedRooms = [];
-    selectedPaymentMethod = null;
-    emailValidated = false;
-}
-
-// Reset steps
-function resetSteps() {
-    currentStep = 1;
-    updateStepIndicators();
-    
-    // Show step 1, hide others
-    document.querySelectorAll('.step-content').forEach(step => step.classList.add('hidden'));
-    document.getElementById('step-1-content').classList.remove('hidden');
-    
-    // Reset step indicators
-    document.querySelectorAll('[id$="indicator"]').forEach(indicator => {
-        indicator.classList.remove('bg-blue-600', 'text-white');
-        indicator.classList.add('bg-gray-300', 'text-gray-600');
-    });
-    document.getElementById('step-1-indicator').classList.add('bg-blue-600', 'text-white');
-}
-
-// Update step indicators
-function updateStepIndicators() {
-    const indicators = ['step-1-indicator', 'step-2-indicator', 'step-3-indicator', 'step-4-indicator'];
-    
-    indicators.forEach((id, index) => {
-        const indicator = document.getElementById(id);
-        if (index + 1 < currentStep) {
-            // Completed step
-            indicator.classList.remove('bg-gray-300', 'text-gray-600');
-            indicator.classList.add('bg-green-500', 'text-white');
-        } else if (index + 1 === currentStep) {
-            // Current step
-            indicator.classList.remove('bg-gray-300', 'text-gray-600', 'bg-green-500');
-            indicator.classList.add('bg-blue-600', 'text-white');
-        } else {
-            // Upcoming step
-            indicator.classList.remove('bg-blue-600', 'text-white', 'bg-green-500');
-            indicator.classList.add('bg-gray-300', 'text-gray-600');
-        }
-    });
-}
-
-// Navigate to next step
-async function nextStep(step) {
-    // Validate current step before proceeding
-    if (currentStep === 1 && !validateStep1()) {
-        return;
-    }
-    if (currentStep === 2 && !await validateStep2()) {
-        return;
-    }
-    if (currentStep === 3 && !validateStep3()) {
-        return;
-    }
-
-    // Hide current step
-    document.getElementById(`step-${currentStep}-content`).classList.add('hidden');
-    
-    // Show next step
-    document.getElementById(`step-${step}-content`).classList.remove('hidden');
-    
-    currentStep = step;
-    updateStepIndicators();
-    
-    // Special handling for each step
-    if (step === 3) {
-        updatePaymentSummary();
-    } else if (step === 4) {
-        updateConfirmationDetails();
-    }
-}
-
-// Navigate to previous step
-function prevStep(step) {
-    document.getElementById(`step-${currentStep}-content`).classList.add('hidden');
-    document.getElementById(`step-${step}-content`).classList.remove('hidden');
-    currentStep = step;
-    updateStepIndicators();
-}
-
-// Validate step 1 (Dates and Rooms)
-function validateStep1() {
-    const checkIn = document.getElementById('check_in_date').value;
-    const checkOut = document.getElementById('check_out_date').value;
-    const numGuests = document.getElementById('num_guests').value;
-    
-    if (!checkIn || !checkOut || !numGuests) {
-        alert('Please fill in all required fields');
-        return false;
-    }
-    
-    if (new Date(checkOut) <= new Date(checkIn)) {
-        alert('Check-out date must be after check-in date');
-        return false;
-    }
-    
-    if (selectedRooms.length === 0) {
-        alert('Please select at least one room');
-        return false;
-    }
-    
-    return true;
-}
-
-// Validate step 2 (Guest Information)
-async function validateStep2() {
-    const firstName = document.getElementById('first_name').value;
-    const lastName = document.getElementById('last_name').value;
-    const email = document.getElementById('email').value;
-    const contact = document.getElementById('contact_number').value;
-    
-    if (!firstName || !lastName || !email || !contact) {
-        alert('Please fill in all required fields');
-        return false;
-    }
-    
-    // Validate email
-    if (!isValidEmail(email)) {
-        alert('Please enter a valid email address');
-        return false;
-    }
-    
-    // Check email availability
-    const emailValid = await checkEmailAvailability(email, firstName, lastName);
-    if (!emailValid) {
-        return false;
-    }
-    
-    return true;
-}
-
-// Validate step 3 (Payment)
-function validateStep3() {
-    if (!selectedPaymentMethod) {
-        alert('Please select a payment method');
-        return false;
-    }
-    return true;
-}
-
-// Calculate nights
-function calculateNights() {
-    const checkIn = document.getElementById('check_in_date').value;
-    const checkOut = document.getElementById('check_out_date').value;
-    
-    if (checkIn && checkOut) {
-        const start = new Date(checkIn);
-        const end = new Date(checkOut);
-        const nights = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
-        
-        document.getElementById('nights-display').textContent = `${nights} night${nights !== 1 ? 's' : ''}`;
-        document.getElementById('dates-range').textContent = 
-            `${formatDate(start)} to ${formatDate(end)}`;
-        
-        updatePriceSummary(nights);
-        
-        // Check availability if dates are selected
-        if (nights > 0) {
-            checkAvailability();
-        }
-        
-        return nights;
-    }
-    return 0;
-}
-
-// Format date
-function formatDate(date) {
-    return date.toLocaleDateString('en-US', { 
-        month: 'short', 
-        day: 'numeric', 
-        year: 'numeric' 
-    });
-}
-
-// Update price summary
-function updatePriceSummary(nights) {
-    const roomPrice = selectedRoomPrice;
-    const roomsCount = selectedRooms.length;
-    const total = roomPrice * nights * roomsCount;
-    
-    document.getElementById('room-price-summary').textContent = `₱${roomPrice.toLocaleString()}`;
-    document.getElementById('nights-summary').textContent = nights;
-    document.getElementById('rooms-count-summary').textContent = roomsCount;
-    document.getElementById('total-amount-summary').textContent = `₱${total.toLocaleString()}`;
-    
-    // Enable/disable next button
-    const nextButton = document.getElementById('next-to-guest');
-    nextButton.disabled = !(nights > 0 && roomsCount > 0);
-    
-    // Show/hide price summary
-    const priceSummary = document.getElementById('price-summary');
-    if (nights > 0 && roomsCount > 0) {
-        priceSummary.classList.remove('hidden');
-    } else {
-        priceSummary.classList.add('hidden');
-    }
-}
-
-// Check room availability
-async function checkAvailability() {
-    const checkIn = document.getElementById('check_in_date').value;
-    const checkOut = document.getElementById('check_out_date').value;
-    const numGuests = document.getElementById('num_guests').value;
-    
-    if (!checkIn || !checkOut || !selectedRoomTypeId) {
-        return;
-    }
-    
-    try {
-        const response = await fetch('{{ route("reservations.available-rooms") }}', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': '{{ csrf_token() }}'
-            },
-            body: JSON.stringify({
-                check_in_date: checkIn,
-                check_out_date: checkOut,
-                room_type_id: selectedRoomTypeId
-            })
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            displayAvailableRooms(data.rooms);
-        } else {
-            console.error('Failed to check availability:', data.message);
-        }
-    } catch (error) {
-        console.error('Error checking availability:', error);
-    }
-}
-
-// Display available rooms
-function displayAvailableRooms(rooms) {
-    const container = document.getElementById('available-rooms-list');
-    const section = document.getElementById('available-rooms-section');
-    
-    if (rooms.length === 0) {
-        container.innerHTML = `
-            <div class="text-center py-4 text-gray-500">
-                <svg class="w-12 h-12 mx-auto text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                </svg>
-                <p>No rooms available for selected dates</p>
-            </div>
-        `;
-        section.classList.remove('hidden');
-        selectedRooms = [];
-        updatePriceSummary(calculateNights());
-        return;
-    }
-    
-    container.innerHTML = '';
-    rooms.forEach(room => {
-        const isSelected = selectedRooms.some(r => r.room_id === room.room_id);
-        const roomElement = document.createElement('div');
-        roomElement.className = `flex items-center justify-between p-3 border rounded-lg ${isSelected ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-blue-300'}`;
-        roomElement.innerHTML = `
-            <div class="flex items-center">
-                <input type="checkbox" id="room-${room.room_id}" 
-                       ${isSelected ? 'checked' : ''}
-                       onchange="toggleRoomSelection(${room.room_id}, '${room.room_number}', ${room.price})"
-                       class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500">
-                <label for="room-${room.room_id}" class="ml-3">
-                    <span class="font-medium">Room ${room.room_number}</span>
-                    <span class="text-sm text-gray-500 ml-2">(Floor ${room.floor})</span>
-                </label>
-            </div>
-            <div class="text-right">
-                <div class="font-semibold text-blue-600">₱${room.price.toLocaleString()}/night</div>
-                ${room.image_path ? 
-                    `<img src="${room.image_path}" alt="Room ${room.room_number}" class="mt-2 w-20 h-12 object-cover rounded">` : 
-                    ''
-                }
-            </div>
-        `;
-        container.appendChild(roomElement);
-    });
-    
-    section.classList.remove('hidden');
-}
-
-// Toggle room selection
-function toggleRoomSelection(roomId, roomNumber, price) {
-    const checkbox = document.getElementById(`room-${roomId}`);
-    
-    if (checkbox.checked) {
-        selectedRooms.push({
-            room_id: roomId,
-            room_number: roomNumber,
-            price: price
-        });
-    } else {
-        selectedRooms = selectedRooms.filter(room => room.room_id !== roomId);
-    }
-    
-    updatePriceSummary(calculateNights());
-}
-
-// Validate email format
-function isValidEmail(email) {
-    const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return re.test(email);
-}
-
-// Check email availability
-async function checkEmailAvailability(email, firstName, lastName) {
-    try {
-        const response = await fetch('{{ route("reservations.check-email") }}', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': '{{ csrf_token() }}'
-            },
-            body: JSON.stringify({
-                email: email,
-                first_name: firstName,
-                last_name: lastName
-            })
-        });
-        
-        const data = await response.json();
-        const validationDiv = document.getElementById('email-validation');
-        
-        if (data.conflict) {
-            validationDiv.innerHTML = `
-                <div class="text-red-600 flex items-center">
-                    <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+    <!-- Rooms Selection Modal -->
+    <div id="roomsModal" class="hidden fixed inset-0 z-50 bg-black/80" onclick="closeModalOnBackdrop('roomsModal')">
+        <div class="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-6xl bg-white rounded-lg shadow-lg p-6 max-h-[90vh] overflow-y-auto custom-scrollbar" onclick="event.stopPropagation()">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-2xl font-bold">Select Rooms</h2>
+                <button onclick="closeModal('roomsModal')" class="text-gray-500 hover:text-gray-700">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                     </svg>
-                    ${data.error_message}
+                </button>
+            </div>
+
+            <div class="mb-6">
+                <div class="flex justify-between items-center mb-4">
+                    <div>
+                        <span id="selectedRoomTypeName" class="font-semibold text-lg"></span>
+                        <span id="availableRoomsCount" class="text-sm text-gray-500 ml-2"></span>
+                    </div>
+                    <div class="text-sm text-gray-500">
+                        Price: <span id="roomTypePrice" class="font-semibold"></span>/night
+                        | Select up to: <span id="maxRoomsToSelect" class="font-semibold text-blue-600">1</span> rooms
+                    </div>
                 </div>
-            `;
-            validationDiv.classList.remove('hidden');
-            emailValidated = false;
-            return false;
-        } else if (data.exists) {
-            validationDiv.innerHTML = `
-                <div class="text-green-600 flex items-center">
-                    <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                
+                <!-- Selected Rooms Counter -->
+                <div class="mb-4">
+                    <div class="flex items-center space-x-4">
+                        <div class="text-sm">
+                            <span class="font-medium text-gray-700">Selected:</span>
+                            <span id="selectedRoomsCounter" class="ml-2 font-bold text-green-600">0</span>
+                            <span>/</span>
+                            <span id="totalRoomsNeeded" class="font-medium">1</span>
+                        </div>
+                        <div class="flex-1">
+                            <div class="w-full bg-gray-200 rounded-full h-2.5">
+                                <div id="selectionProgress" class="bg-green-600 h-2.5 rounded-full" style="width: 0%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Available Rooms Grid -->
+            <div id="availableRoomsList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-6">
+                <!-- Available rooms will be loaded here -->
+                <div class="col-span-full text-center py-8 text-gray-500">
+                    <div class="animate-pulse">
+                        <div class="h-12 w-12 mx-auto bg-gray-300 rounded-full mb-4"></div>
+                        <div class="h-4 w-48 mx-auto bg-gray-300 rounded mb-2"></div>
+                        <div class="h-4 w-32 mx-auto bg-gray-300 rounded"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Selected Rooms Cart -->
+            <div id="selectedRoomsCart" class="bg-green-50 border border-green-200 rounded-lg p-4 mb-6 hidden">
+                <h4 class="font-semibold mb-3 text-green-800">Selected Rooms</h4>
+                <div id="selectedRoomsList" class="space-y-2">
+                    <!-- Selected rooms will appear here -->
+                </div>
+                <div class="mt-3 pt-3 border-t border-green-200">
+                    <div class="flex justify-between font-semibold">
+                        <span>Subtotal:</span>
+                        <span id="cartSubtotal">₱0.00</span>
+                    </div>
+                    <div class="flex justify-between text-sm text-gray-600">
+                        <span>Nights:</span>
+                        <span id="cartNights">0</span>
+                    </div>
+                    <div class="flex justify-between font-bold text-lg mt-2">
+                        <span>Total Amount:</span>
+                        <span id="cartTotal" class="text-green-700">₱0.00</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-between">
+                <button onclick="showGuestDatesModal()" 
+                        class="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
+                    Back
+                </button>
+                <button id="proceedToPaymentBtn" onclick="showPaymentModal()"
+                        class="px-6 py-2 bg-gray-300 text-gray-500 rounded-lg cursor-not-allowed" disabled>
+                    Proceed to Payment
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Payment Modal -->
+    <div id="paymentModal" class="hidden fixed inset-0 z-50 bg-black/80" onclick="closeModalOnBackdrop('paymentModal')">
+        <div class="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl bg-white rounded-lg shadow-lg p-6 max-h-[90vh] overflow-y-auto custom-scrollbar" onclick="event.stopPropagation()">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-2xl font-bold">Complete Your Booking</h2>
+                <button onclick="closeModal('paymentModal')" class="text-gray-500 hover:text-gray-700">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                     </svg>
-                    Welcome back ${data.guest_name}!
+                </button>
+            </div>
+
+            <div class="space-y-6">
+                <!-- Booking Summary -->
+                <div class="bg-gray-50 rounded-lg p-4">
+                    <h4 class="font-semibold mb-3">Booking Summary</h4>
+                    <div id="bookingSummary" class="space-y-2 text-sm">
+                        <!-- Booking summary will be populated here -->
+                    </div>
                 </div>
-            `;
-            validationDiv.classList.remove('hidden');
-            emailValidated = true;
-            return true;
-        } else {
-            validationDiv.classList.add('hidden');
-            emailValidated = true;
-            return true;
-        }
-    } catch (error) {
-        console.error('Error checking email:', error);
-        return true; // Allow proceeding even if validation fails
-    }
-}
 
-// Select payment method
-function selectPaymentMethod(method) {
-    selectedPaymentMethod = method;
-    
-    // Remove selection from all methods
-    document.querySelectorAll('.payment-method').forEach(el => {
-        el.classList.remove('border-blue-500', 'bg-blue-50');
-        el.classList.add('border-transparent');
-    });
-    
-    // Add selection to chosen method
-    const selectedEl = document.querySelector(`[data-method="${method}"]`);
-    selectedEl.classList.remove('border-transparent');
-    selectedEl.classList.add('border-blue-500', 'bg-blue-50');
-    
-    // Show payment details
-    document.getElementById('payment-details').classList.remove('hidden');
-    document.getElementById('process-payment').classList.remove('hidden');
-    
-    // Show appropriate payment form
-    document.getElementById('card-payment-form').classList.add('hidden');
-    document.getElementById('cash-payment-instructions').classList.add('hidden');
-    document.getElementById('online-payment-instructions').classList.add('hidden');
-    
-    if (method === 'card') {
-        document.getElementById('card-payment-form').classList.remove('hidden');
-    } else if (method === 'cash') {
-        document.getElementById('cash-payment-instructions').classList.remove('hidden');
-    } else if (method === 'online') {
-        document.getElementById('online-payment-instructions').classList.remove('hidden');
-    }
-}
+                <!-- Payment Methods -->
+                <div>
+                    <label class="block text-sm font-medium mb-3">Payment Method *</label>
+                    <div class="space-y-3">
+                        <!-- Cash -->
+                        <label class="flex items-center space-x-3 border rounded-lg p-4 cursor-pointer hover:bg-gray-50 transition-colors payment-method">
+                            <input type="radio" name="paymentMethod" value="credit_card" checked class="w-4 h-4 text-blue-600">
+                            <div class="flex-1">
+                                <div class="font-medium">Pay Using (Credit Card)</div>
+                                <div class="text-sm text-gray-600">Pay Using Credit Card</div>
+                            </div>
+                        </label>
 
-// Update payment summary
-function updatePaymentSummary() {
-    const nights = calculateNights();
-    const roomPrice = selectedRoomPrice;
-    const roomsCount = selectedRooms.length;
-    const total = roomPrice * nights * roomsCount;
-    
-    document.getElementById('payment-total').textContent = `₱${total.toLocaleString()}`;
-}
+                        <!-- Online -->
+                        <label class="flex items-center space-x-3 border rounded-lg p-4 cursor-pointer hover:bg-gray-50 transition-colors payment-method">
+                            <input type="radio" name="paymentMethod" value="online" class="w-4 h-4 text-blue-600">
+                            <div class="flex-1">
+                                <div class="font-medium">Online Payment</div>
+                                <div class="text-sm text-gray-600">Pay now via Stripe</div>
+                            </div>
+                        </label>
+                    </div>
+                </div>
 
-// Process payment
-async function processPayment() {
-    if (!selectedPaymentMethod) {
-        alert('Please select a payment method');
-        return;
-    }
-    
-    // Collect all data
-    const checkIn = document.getElementById('check_in_date').value;
-    const checkOut = document.getElementById('check_out_date').value;
-    const numGuests = document.getElementById('num_guests').value;
-    const firstName = document.getElementById('first_name').value;
-    const lastName = document.getElementById('last_name').value;
-    const email = document.getElementById('email').value;
-    const contact = document.getElementById('contact_number').value;
-    const specialRequests = document.getElementById('special_requests').value;
-    const nights = calculateNights();
-    const totalAmount = selectedRoomPrice * nights * selectedRooms.length;
-    
-    const bookingData = {
-        first_name: firstName,
-        last_name: lastName,
-        email: email,
-        contact_number: contact,
-        check_in_date: checkIn,
-        check_out_date: checkOut,
-        num_guests: parseInt(numGuests),
-        room_ids: selectedRooms.map(room => room.room_id),
-        booking_source: 'online',
-        special_requests: specialRequests,
-        total_amount: totalAmount,
-        payment_method: selectedPaymentMethod
-    };
-    
-    try {
-        // Create reservation
-        const response = await fetch('{{ route("guest.booking.confirm") }}', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': '{{ csrf_token() }}'
-            },
-            body: JSON.stringify(bookingData)
-        });
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            // If online payment, redirect to payment gateway
-            if (selectedPaymentMethod === 'online') {
-                // Handle online payment redirection
-                if (result.payment_url) {
-                    window.location.href = result.payment_url;
-                }
-            } else {
-                // For cash/card, proceed to confirmation
-                nextStep(4);
-            }
-        } else {
-            alert('Failed to create booking: ' + (result.message || 'Unknown error'));
-        }
-    } catch (error) {
-        console.error('Error processing booking:', error);
-        alert('Failed to process booking. Please try again.');
-    }
-}
+                <!-- Terms Agreement -->
+                <div>
+                    <label class="flex items-start space-x-3">
+                        <input type="checkbox" id="agreeTerms" required class="w-4 h-4 mt-1 text-blue-600">
+                        <div class="text-sm text-gray-700">
+                            I agree to the <a href="#" class="text-blue-600 hover:underline">Terms and Conditions</a> and 
+                            <a href="#" class="text-blue-600 hover:underline">Cancellation Policy</a> of Azure Grand Hotel.
+                        </div>
+                    </label>
+                </div>
 
-// Update confirmation details
-function updateConfirmationDetails() {
-    const checkIn = document.getElementById('check_in_date').value;
-    const checkOut = document.getElementById('check_out_date').value;
-    const firstName = document.getElementById('first_name').value;
-    const lastName = document.getElementById('last_name').value;
-    const email = document.getElementById('email').value;
-    const contact = document.getElementById('contact_number').value;
-    const nights = calculateNights();
-    const roomsList = selectedRooms.map(room => `Room ${room.room_number}`).join(', ');
-    
-    const detailsHtml = `
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-                <h6 class="font-semibold text-gray-700">Guest Information</h6>
-                <p class="text-gray-600">${firstName} ${lastName}</p>
-                <p class="text-gray-600">${email}</p>
-                <p class="text-gray-600">${contact}</p>
-            </div>
-            <div>
-                <h6 class="font-semibold text-gray-700">Stay Details</h6>
-                <p class="text-gray-600">Check-in: ${formatDate(new Date(checkIn))}</p>
-                <p class="text-gray-600">Check-out: ${formatDate(new Date(checkOut))}</p>
-                <p class="text-gray-600">${nights} nights</p>
-            </div>
-            <div class="md:col-span-2">
-                <h6 class="font-semibold text-gray-700">Room Information</h6>
-                <p class="text-gray-600">Room Type: ${selectedRoomTypeName}</p>
-                <p class="text-gray-600">Rooms: ${roomsList}</p>
-                <p class="text-gray-600">Payment Method: ${selectedPaymentMethod.toUpperCase()}</p>
-            </div>
-            <div class="md:col-span-2 border-t pt-4">
-                <div class="flex justify-between text-lg font-bold text-blue-700">
-                    <span>Total Amount:</span>
-                    <span>₱${(selectedRoomPrice * nights * selectedRooms.length).toLocaleString()}</span>
+                <!-- Action Buttons -->
+                <div class="flex justify-between pt-4">
+                    <button onclick="showRoomsModal()" 
+                            class="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
+                        Back to Rooms
+                    </button>
+                    <button onclick="completeBooking()" 
+                            class="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                        </svg>
+                        Complete Booking
+                    </button>
                 </div>
             </div>
         </div>
-    `;
-    
-    document.getElementById('confirmation-details').innerHTML = detailsHtml;
-}
+    </div>
 
-// Initialize event listeners
-document.addEventListener('DOMContentLoaded', function() {
-    // Date change listeners
-    document.getElementById('check_in_date').addEventListener('change', function() {
-        const checkOut = document.getElementById('check_out_date');
-        if (checkOut.value && new Date(checkOut.value) <= new Date(this.value)) {
-            const nextDay = new Date(this.value);
-            nextDay.setDate(nextDay.getDate() + 1);
-            checkOut.value = nextDay.toISOString().split('T')[0];
+    <!-- Success Modal -->
+    <div id="successModal" class="hidden fixed inset-0 z-50 bg-black/80" onclick="closeModalOnBackdrop('successModal')">
+        <div class="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-white rounded-lg shadow-lg overflow-hidden" onclick="event.stopPropagation()">
+            <div class="bg-gradient-to-br from-green-50 to-white p-8">
+                <div class="text-center mb-6">
+                    <div class="w-20 h-20 mx-auto mb-4 bg-green-100 rounded-full flex items-center justify-center">
+                        <svg class="w-10 h-10 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                    </div>
+                    <h2 class="text-2xl font-bold text-gray-900 mb-2">Booking Confirmed!</h2>
+                    <p class="text-gray-600">Your reservation has been successfully created</p>
+                </div>
+
+                <div class="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+                    <div class="space-y-3">
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Reference:</span>
+                            <span id="successRef" class="font-medium">-</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Status:</span>
+                            <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
+                                ✓ CONFIRMED
+                            </span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Total:</span>
+                            <span id="successTotal" class="font-bold text-green-600">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                    <h4 class="font-semibold text-blue-800 mb-2">Next Steps</h4>
+                    <ul class="text-sm text-blue-700 space-y-2">
+                        <li class="flex items-start">
+                            <svg class="w-4 h-4 mr-2 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                            </svg>
+                            A confirmation email has been sent to your email address
+                        </li>
+                        <li class="flex items-start">
+                            <svg class="w-4 h-4 mr-2 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                            </svg>
+                            Please present your ID at check-in
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="flex gap-3">
+                    <button onclick="closeModal('successModal')"
+                            class="flex-1 inline-flex items-center justify-center rounded-md px-4 py-3 border border-gray-300 bg-white text-gray-700 hover:bg-gray-100 transition-colors font-medium">
+                        Close
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {{-- Scripts --}}
+    <script>
+        // Global variables
+        let selectedRoomTypeId = null;
+        let selectedRooms = [];
+        let bookingData = {};
+        let tempReference = null;
+        let maxRoomsToSelect = 1;
+        let availableRoomsData = [];
+
+        // Initialize Lucide icons
+        lucide.createIcons();
+
+        // Toast notification
+        function showToast(message, type = 'info') {
+            const toastContainer = document.getElementById('toast-container');
+            const toastId = 'toast-' + Date.now();
+            
+            const typeClasses = {
+                success: 'bg-green-500 text-white',
+                error: 'bg-red-500 text-white',
+                info: 'bg-blue-500 text-white',
+                warning: 'bg-yellow-500 text-white'
+            };
+            
+            const toast = document.createElement('div');
+            toast.id = toastId;
+            toast.className = `${typeClasses[type]} rounded-lg shadow-lg p-4 flex items-center justify-between min-w-80 transform transition-all duration-300 translate-x-full toast`;
+            toast.innerHTML = `
+                <div class="flex items-center">
+                    <span>${message}</span>
+                </div>
+                <button onclick="closeToast('${toastId}')" class="ml-4 text-white hover:text-gray-200">
+                    ✕
+                </button>
+            `;
+            
+            toastContainer.appendChild(toast);
+            
+            // Animate in
+            setTimeout(() => {
+                toast.classList.remove('translate-x-full');
+            }, 10);
+            
+            // Auto remove after 5 seconds
+            setTimeout(() => {
+                closeToast(toastId);
+            }, 5000);
         }
-        calculateNights();
-    });
-    
-    document.getElementById('check_out_date').addEventListener('change', calculateNights);
-    document.getElementById('num_guests').addEventListener('input', calculateNights);
-    
-    // Email validation on blur
-    document.getElementById('email').addEventListener('blur', async function() {
-        const firstName = document.getElementById('first_name').value;
-        const lastName = document.getElementById('last_name').value;
-        if (this.value && firstName && lastName) {
-            await checkEmailAvailability(this.value, firstName, lastName);
+        
+        function closeToast(toastId) {
+            const toast = document.getElementById(toastId);
+            if (toast) {
+                toast.classList.add('translate-x-full', 'opacity-0');
+                setTimeout(() => {
+                    toast.remove();
+                }, 300);
+            }
         }
-    });
-});
-</script>
-@endpush
 
-<style>
-.step-content {
-    transition: opacity 0.3s ease;
-}
+        // Start booking process
+        function startBooking(roomTypeId) {
+            console.log('Starting booking for room type:', roomTypeId);
+            selectedRoomTypeId = roomTypeId;
+            
+            // Reset previous selections
+            selectedRooms = [];
+            bookingData = {};
+            tempReference = null;
+            
+            // Get room type info for display
+            const roomCard = document.querySelector(`[onclick="startBooking(${roomTypeId})"]`).closest('.overflow-hidden');
+            const roomTypeName = roomCard.querySelector('h3').textContent;
+            const roomTypePrice = roomCard.querySelector('.text-2xl').textContent.replace('₱', '').replace(',', '').split(' ')[0];
+            
+            // Store for later use
+            bookingData.room_type_name = roomTypeName;
+            bookingData.room_type_price = parseFloat(roomTypePrice);
+            
+            // Show guest + dates modal
+            showGuestDatesModal();
+        }
 
-#available-rooms-list {
-    scrollbar-width: thin;
-    scrollbar-color: #cbd5e1 #f1f5f9;
-}
+        // Modal functions
+        function showGuestDatesModal() {
+            closeAllModals();
+            document.getElementById('guestDatesModal').classList.remove('hidden');
+            
+            // Set default dates
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            const dayAfter = new Date();
+            dayAfter.setDate(dayAfter.getDate() + 2);
+            
+            document.getElementById('checkInDate').value = tomorrow.toISOString().split('T')[0];
+            document.getElementById('checkOutDate').value = dayAfter.toISOString().split('T')[0];
+            
+            // Calculate nights
+            calculateNights();
+        }
 
-#available-rooms-list::-webkit-scrollbar {
-    width: 6px;
-}
+        function showRoomsModal() {
+            closeAllModals();
+            document.getElementById('roomsModal').classList.remove('hidden');
+            
+            // Display room type info
+            document.getElementById('selectedRoomTypeName').textContent = bookingData.room_type_name;
+            document.getElementById('roomTypePrice').textContent = `₱${bookingData.room_type_price.toLocaleString()}`;
+            document.getElementById('maxRoomsToSelect').textContent = maxRoomsToSelect;
+            document.getElementById('totalRoomsNeeded').textContent = maxRoomsToSelect;
+            
+            // Update selected rooms counter
+            updateSelectedRoomsCounter();
+        }
 
-#available-rooms-list::-webkit-scrollbar-track {
-    background: #f1f5f9;
-    border-radius: 3px;
-}
+        function showPaymentModal() {
+            closeAllModals();
+            document.getElementById('paymentModal').classList.remove('hidden');
+            
+            // Update booking summary
+            updateBookingSummary();
+        }
 
-#available-rooms-list::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
-    border-radius: 3px;
-}
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.add('hidden');
+        }
 
-#available-rooms-list::-webkit-scrollbar-thumb:hover {
-    background: #94a3b8;
-}
+        function closeModalOnBackdrop(modalId) {
+            if (event.target.id === modalId || event.target.id.includes(modalId)) {
+                closeModal(modalId);
+            }
+        }
 
-.payment-method {
-    transition: all 0.2s ease;
-}
+        function closeAllModals() {
+            document.getElementById('guestDatesModal').classList.add('hidden');
+            document.getElementById('roomsModal').classList.add('hidden');
+            document.getElementById('paymentModal').classList.add('hidden');
+            document.getElementById('successModal').classList.add('hidden');
+        }
 
-.payment-method:hover {
-    transform: translateY(-2px);
-}
-</style>
+        // Validate guest email
+        async function validateGuestEmail() {
+            const email = document.getElementById('guestEmail').value;
+            const firstName = document.getElementById('guestFirstName').value;
+            const lastName = document.getElementById('guestLastName').value;
+            const emailError = document.getElementById('guestEmailError');
+            const emailSuccess = document.getElementById('guestEmailSuccess');
+            const emailField = document.getElementById('guestEmail');
+            
+            // Clear previous messages
+            emailError.classList.add('hidden');
+            emailSuccess.classList.add('hidden');
+            emailField.classList.remove('border-red-500', 'border-green-500');
+            
+            // Basic email format validation
+            if (!isValidEmail(email)) {
+                if (email) {
+                    emailError.textContent = 'Please enter a valid email address';
+                    emailError.classList.remove('hidden');
+                    emailField.classList.add('border-red-500');
+                }
+                return false;
+            }
+            
+            try {
+                const response = await fetch('/reservations/check-email', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+                    },
+                    body: JSON.stringify({
+                        email: email,
+                        first_name: firstName,
+                        last_name: lastName
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.conflict) {
+                    emailError.textContent = data.error_message || 'Email already registered to a different person';
+                    emailError.classList.remove('hidden');
+                    emailField.classList.add('border-red-500');
+                    return false;
+                } else if (data.exists) {
+                    emailSuccess.textContent = `Welcome back ${data.guest_name}!`;
+                    emailSuccess.classList.remove('hidden');
+                    emailField.classList.add('border-green-500');
+                } else {
+                    emailSuccess.textContent = 'Email is available';
+                    emailSuccess.classList.remove('hidden');
+                    emailField.classList.add('border-green-500');
+                }
+                return true;
+            } catch (error) {
+                console.error('Email validation error:', error);
+                return true;
+            }
+        }
+
+        // Calculate nights
+        function calculateNights() {
+            const checkIn = new Date(document.getElementById('checkInDate').value);
+            const checkOut = new Date(document.getElementById('checkOutDate').value);
+            
+            if (checkIn && checkOut && checkOut > checkIn) {
+                const nights = Math.ceil((checkOut - checkIn) / (1000 * 60 * 60 * 24));
+                document.getElementById('nightsDisplay').value = `${nights} night${nights !== 1 ? 's' : ''}`;
+                return nights;
+            }
+            return 0;
+        }
+
+        // Check availability and proceed to room selection
+        async function checkAvailabilityAndProceed() {
+            // Validate guest info first
+            const firstName = document.getElementById('guestFirstName').value;
+            const lastName = document.getElementById('guestLastName').value;
+            const email = document.getElementById('guestEmail').value;
+            const phone = document.getElementById('guestPhone').value;
+            const checkIn = document.getElementById('checkInDate').value;
+            const checkOut = document.getElementById('checkOutDate').value;
+            const numGuests = document.getElementById('numGuests').value;
+            const numRooms = document.getElementById('numRooms').value;
+            
+            // Basic validation
+            if (!firstName || !lastName || !email || !phone || !checkIn || !checkOut) {
+                showToast('Please fill in all required fields', 'error');
+                return;
+            }
+            
+            if (new Date(checkOut) <= new Date(checkIn)) {
+                showToast('Check-out date must be after check-in date', 'error');
+                return;
+            }
+            
+            // Validate email
+            const emailValid = await validateGuestEmail();
+            if (!emailValid) {
+                showToast('Please fix the email error before proceeding', 'error');
+                return;
+            }
+            
+            // Check availability
+            showToast('Checking availability...', 'info');
+            
+            try {
+                const response = await fetch('/hotel/check-availability', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+                    },
+                    body: JSON.stringify({
+                        check_in_date: checkIn,
+                        check_out_date: checkOut,
+                        room_type_id: selectedRoomTypeId,
+                        num_rooms: parseInt(numRooms) // Send the number of rooms requested
+                    })
+                });
+                
+                const data = await response.json();
+                console.log('Availability response:', data);
+                
+                if (data.success) {
+                    if (data.is_available) {
+                        // Store booking data
+                        bookingData.first_name = firstName;
+                        bookingData.last_name = lastName;
+                        bookingData.email = email;
+                        bookingData.contact_number = phone;
+                        bookingData.special_requests = document.getElementById('guestRequests').value;
+                        bookingData.check_in_date = checkIn;
+                        bookingData.check_out_date = checkOut;
+                        bookingData.num_guests = parseInt(numGuests);
+                        bookingData.num_rooms = parseInt(numRooms);
+                        bookingData.nights = calculateNights();
+                        bookingData.total_amount = data.total_amount;
+                        bookingData.room_type_price = data.room_type.base_price;
+                        
+                        // Set max rooms to select
+                        maxRoomsToSelect = parseInt(numRooms);
+                        
+                        // Load available rooms for selection
+                        await loadAvailableRoomsForSelection();
+                    } else {
+                        showToast(`Only ${data.available_rooms} rooms available (needed: ${numRooms})`, 'error');
+                    }
+                } else {
+                    showToast('Failed to check availability: ' + (data.message || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                console.error('Availability check error:', error);
+                showToast('Failed to check availability. Please try again.', 'error');
+            }
+        }
+
+        // Load available rooms for selection (like booking wizard)
+        async function loadAvailableRoomsForSelection() {
+            showToast('Loading available rooms...', 'info');
+            
+            try {
+                // Get ALL available rooms for selection
+                const response = await fetch('/hotel/check-availability', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+                    },
+                    body: JSON.stringify({
+                        check_in_date: bookingData.check_in_date,
+                        check_out_date: bookingData.check_out_date,
+                        room_type_id: selectedRoomTypeId,
+                        num_rooms: 20 // Get many rooms for selection
+                    })
+                });
+
+                const data = await response.json();
+                console.log('Available rooms response:', data);
+                
+                if (data.success) {
+                    // Store available rooms data
+                    availableRoomsData = data.available_rooms_list || [];
+                    
+                    // Display available rooms for selection
+                    displayAvailableRoomsForSelection(availableRoomsData);
+                    showRoomsModal();
+                } else {
+                    showToast('Failed to load available rooms: ' + (data.message || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                console.error('Error loading available rooms:', error);
+                showToast('Failed to load available rooms. Please try again.', 'error');
+            }
+        }
+
+        // Display available rooms for selection (like booking wizard)
+        function displayAvailableRoomsForSelection(rooms) {
+            const container = document.getElementById('availableRoomsList');
+            
+            document.getElementById('availableRoomsCount').textContent = `(${rooms.length} available)`;
+            
+            container.innerHTML = '';
+            
+            if (rooms.length === 0) {
+                container.innerHTML = `
+                    <div class="col-span-4 text-center py-8 text-gray-500">
+                        <svg class="h-12 w-12 mx-auto text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <h3 class="text-lg font-medium">No rooms available</h3>
+                        <p class="mt-2">No rooms of this type are available for the selected dates.</p>
+                        <button onclick="showGuestDatesModal()" class="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                            Choose Different Dates
+                        </button>
+                    </div>
+                `;
+                return;
+            }
+            
+            rooms.forEach(room => {
+                const isSelected = selectedRooms.some(r => r.room_id === room.room_id);
+                const roomElement = document.createElement('div');
+                roomElement.className = 'relative';
+                roomElement.innerHTML = `
+                    <input type="checkbox" id="room-${room.room_id}" 
+                           class="room-checkbox" 
+                           ${isSelected ? 'checked' : ''}
+                           ${selectedRooms.length >= maxRoomsToSelect && !isSelected ? 'disabled' : ''}
+                           onchange="toggleRoomSelection(${room.room_id}, '${room.room_number}', ${room.floor}, ${bookingData.room_type_price})">
+                    <label for="room-${room.room_id}" class="cursor-pointer">
+                        <div class="room-card-content border rounded-lg p-4 transition-all duration-200 ${
+                            isSelected ? 'border-green-500 bg-green-50' : 
+                            selectedRooms.length >= maxRoomsToSelect ? 'opacity-50 border-gray-200 bg-gray-50' : 
+                            'border-gray-200 bg-white hover:border-blue-300 hover:shadow-md'
+                        }">
+                            <div class="mb-3">
+                                <h4 class="font-semibold text-lg">Room ${room.room_number}</h4>
+                                <p class="text-sm text-gray-600">Floor ${room.floor}</p>
+                            </div>
+                            <div class="space-y-2">
+                                <p class="text-lg font-bold text-green-600">₱${bookingData.room_type_price.toLocaleString()}/night</p>
+                                <div class="flex items-center justify-between">
+                                    <span class="text-sm text-gray-500">Select room</span>
+                                    ${isSelected ? 
+                                        '<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">✓ Selected</span>' : 
+                                        ''}
+                                </div>
+                            </div>
+                        </div>
+                    </label>
+                `;
+                container.appendChild(roomElement);
+            });
+            
+            // Update UI
+            updateSelectedRoomsCart();
+            updateSelectedRoomsCounter();
+        }
+
+        // Toggle room selection
+        function toggleRoomSelection(roomId, roomNumber, floor, price) {
+            const index = selectedRooms.findIndex(r => r.room_id === roomId);
+            
+            if (index === -1) {
+                // Add room if we haven't reached the limit
+                if (selectedRooms.length < maxRoomsToSelect) {
+                    selectedRooms.push({
+                        room_id: roomId,
+                        room_number: roomNumber,
+                        floor: floor,
+                        price: price
+                    });
+                } else {
+                    showToast(`You can only select up to ${maxRoomsToSelect} rooms`, 'warning');
+                    return;
+                }
+            } else {
+                // Remove room
+                selectedRooms.splice(index, 1);
+            }
+            
+            // Update UI
+            updateSelectedRoomsCart();
+            updateSelectedRoomsCounter();
+            
+            // Re-render rooms to update disabled states
+            displayAvailableRoomsForSelection(availableRoomsData);
+        }
+
+        // Update selected rooms counter
+        function updateSelectedRoomsCounter() {
+            const counter = document.getElementById('selectedRoomsCounter');
+            const progress = document.getElementById('selectionProgress');
+            
+            counter.textContent = selectedRooms.length;
+            
+            // Update progress bar
+            const progressPercent = (selectedRooms.length / maxRoomsToSelect) * 100;
+            progress.style.width = `${progressPercent}%`;
+            
+            // Enable/disable proceed button
+            const proceedBtn = document.getElementById('proceedToPaymentBtn');
+            if (selectedRooms.length === maxRoomsToSelect) {
+                proceedBtn.disabled = false;
+                proceedBtn.classList.remove('bg-gray-300', 'text-gray-500', 'cursor-not-allowed');
+                proceedBtn.classList.add('bg-blue-600', 'text-white', 'hover:bg-blue-700');
+            } else {
+                proceedBtn.disabled = true;
+                proceedBtn.classList.remove('bg-blue-600', 'text-white', 'hover:bg-blue-700');
+                proceedBtn.classList.add('bg-gray-300', 'text-gray-500', 'cursor-not-allowed');
+            }
+        }
+
+        // Update selected rooms cart
+        function updateSelectedRoomsCart() {
+            const cart = document.getElementById('selectedRoomsCart');
+            const list = document.getElementById('selectedRoomsList');
+            const nights = bookingData.nights || 0;
+            
+            if (selectedRooms.length > 0) {
+                cart.classList.remove('hidden');
+                
+                list.innerHTML = '';
+                let subtotal = 0;
+                
+                selectedRooms.forEach(room => {
+                    const roomTotal = room.price * nights;
+                    subtotal += roomTotal;
+                    
+                    const roomElement = document.createElement('div');
+                    roomElement.className = 'flex justify-between items-center py-2';
+                    roomElement.innerHTML = `
+                        <div>
+                            <span class="font-medium">Room ${room.room_number}</span>
+                            <span class="text-sm text-gray-500 ml-2">(Floor ${room.floor})</span>
+                            <span class="text-sm text-gray-500 ml-2">₱${room.price.toLocaleString()}/night</span>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <span class="font-semibold">₱${roomTotal.toLocaleString()}</span>
+                            <button onclick="removeRoomFromSelection(${room.room_id})" class="text-red-600 hover:text-red-800 p-1">
+                                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                    `;
+                    list.appendChild(roomElement);
+                });
+                
+                document.getElementById('cartSubtotal').textContent = `₱${subtotal.toLocaleString()}`;
+                document.getElementById('cartNights').textContent = nights;
+                document.getElementById('cartTotal').textContent = `₱${subtotal.toLocaleString()}`;
+                
+                // Update booking data
+                bookingData.total_amount = subtotal;
+                bookingData.room_ids = selectedRooms.map(r => r.room_id);
+                bookingData.selected_rooms = selectedRooms;
+            } else {
+                cart.classList.add('hidden');
+            }
+        }
+
+        // Remove room from selection
+        function removeRoomFromSelection(roomId) {
+            selectedRooms = selectedRooms.filter(room => room.room_id !== roomId);
+            
+            // Update UI
+            updateSelectedRoomsCart();
+            updateSelectedRoomsCounter();
+            
+            // Uncheck the checkbox
+            const checkbox = document.getElementById(`room-${roomId}`);
+            if (checkbox) {
+                checkbox.checked = false;
+            }
+            
+            // Re-render rooms
+            displayAvailableRoomsForSelection(availableRoomsData);
+        }
+
+        // Update booking summary for payment
+        function updateBookingSummary() {
+            const summaryDiv = document.getElementById('bookingSummary');
+            const nights = bookingData.nights || 0;
+            const totalAmount = bookingData.total_amount || 0;
+            
+            summaryDiv.innerHTML = `
+                <div class="flex justify-between">
+                    <span class="text-gray-600">Guest:</span>
+                    <span class="font-medium">${bookingData.first_name} ${bookingData.last_name}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-600">Email:</span>
+                    <span class="font-medium">${bookingData.email}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-600">Check-in:</span>
+                    <span class="font-medium">${new Date(bookingData.check_in_date).toLocaleDateString()}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-600">Check-out:</span>
+                    <span class="font-medium">${new Date(bookingData.check_out_date).toLocaleDateString()}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-600">Duration:</span>
+                    <span class="font-medium">${nights} night${nights !== 1 ? 's' : ''}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-600">Guests:</span>
+                    <span class="font-medium">${bookingData.num_guests}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-600">Rooms:</span>
+                    <span class="font-medium">${selectedRooms.map(r => `Room ${r.room_number}`).join(', ')}</span>
+                </div>
+                <div class="flex justify-between pt-3 border-t mt-2">
+                    <span class="font-bold text-gray-900">Total Amount:</span>
+                    <span class="text-lg font-bold text-blue-600">₱${totalAmount.toLocaleString()}</span>
+                </div>
+            `;
+        }
+
+        // Complete booking
+        async function completeBooking() {
+            // Validate terms agreement
+            if (!document.getElementById('agreeTerms').checked) {
+                showToast('Please agree to the terms and conditions', 'error');
+                return;
+            }
+            
+            const paymentMethod = document.querySelector('input[name="paymentMethod"]:checked').value;
+            
+            // Step 1: Prepare booking (create temp session)
+            showToast('Preparing your booking...', 'info');
+            
+            try {
+                const prepareResponse = await fetch('/hotel/booking/prepare', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+                    },
+                    body: JSON.stringify({
+                        room_type_id: selectedRoomTypeId,
+                        check_in_date: bookingData.check_in_date,
+                        check_out_date: bookingData.check_out_date,
+                        num_rooms: selectedRooms.length,
+                        num_guests: bookingData.num_guests
+                    })
+                });
+                
+                const prepareResult = await prepareResponse.json();
+                
+                if (prepareResult.success) {
+                    tempReference = prepareResult.temp_reference;
+                    
+                    // Step 2: Confirm booking with guest details
+                    showToast('Creating your reservation...', 'info');
+                    
+                    const confirmResponse = await fetch('/hotel/booking/confirm', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+                        },
+                        body: JSON.stringify({
+                            first_name: bookingData.first_name,
+                            last_name: bookingData.last_name,
+                            email: bookingData.email,
+                            contact_number: bookingData.contact_number,
+                            special_requests: bookingData.special_requests,
+                            payment_method: paymentMethod,
+                            temp_reference: tempReference
+                        })
+                    });
+                    
+                    const confirmResult = await confirmResponse.json();
+                    
+                    if (confirmResult.success) {
+                        if (paymentMethod === 'online' && confirmResult.redirect_url) {
+                            // Redirect to Stripe for online payment
+                            showToast('Redirecting to payment...', 'info');
+                            setTimeout(() => {
+                                window.location.href = confirmResult.redirect_url;
+                            }, 1000);
+                        } else {
+                            // Show success for cash payment
+                            showSuccessModal(confirmResult);
+                        }
+                    } else {
+                        showToast('Booking failed: ' + (confirmResult.message || 'Unknown error'), 'error');
+                    }
+                } else {
+                    showToast('Preparation failed: ' + (prepareResult.message || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                console.error('Booking error:', error);
+                showToast('Booking failed. Please try again.', 'error');
+            }
+        }
+
+        // Show success modal
+        function showSuccessModal(result) {
+            document.getElementById('successRef').textContent = result.booking_reference || result.reservation_id;
+            document.getElementById('successTotal').textContent = `₱${bookingData.total_amount.toLocaleString()}`;
+            
+            closeAllModals();
+            document.getElementById('successModal').classList.remove('hidden');
+        }
+
+        // Helper functions
+        function isValidEmail(email) {
+            const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            return re.test(email);
+        }
+
+        // Event listeners
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Home page booking system initialized');
+            
+            // Date change listeners
+            document.getElementById('checkInDate')?.addEventListener('change', function() {
+                const checkOut = document.getElementById('checkOutDate');
+                if (checkOut.value && new Date(checkOut.value) <= new Date(this.value)) {
+                    const nextDay = new Date(this.value);
+                    nextDay.setDate(nextDay.getDate() + 1);
+                    checkOut.value = nextDay.toISOString().split('T')[0];
+                }
+                calculateNights();
+            });
+            
+            document.getElementById('checkOutDate')?.addEventListener('change', function() {
+                calculateNights();
+            });
+
+            // Real-time email validation
+            let emailTimeout;
+            document.getElementById('guestEmail')?.addEventListener('input', function() {
+                clearTimeout(emailTimeout);
+                emailTimeout = setTimeout(() => {
+                    validateGuestEmail();
+                }, 500);
+            });
+            
+            // Number of rooms input validation
+            document.getElementById('numRooms')?.addEventListener('change', function() {
+                const numRooms = parseInt(this.value);
+                if (numRooms < 1) {
+                    this.value = 1;
+                } else if (numRooms > 10) {
+                    this.value = 10;
+                    showToast('Maximum 10 rooms per booking', 'info');
+                }
+            });
+            
+            // Intersection Observer for scroll animations
+            const observerOptions = {
+                threshold: 0.1,
+                rootMargin: '0px 0px -50px 0px'
+            };
+
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add('animate-slide-up');
+                    }
+                });
+            }, observerOptions);
+
+            // Observe elements for animation
+            document.querySelectorAll('#rooms .animate-slide-up').forEach(el => {
+                observer.observe(el);
+            });
+        });
+    </script>
+</body>
+</html>

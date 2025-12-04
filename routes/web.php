@@ -28,14 +28,17 @@ Route::get('/', function () {
     return view('login');
 })->name('home');
 
+// Home page with room types
+Route::get('/home', [GuestBookingController::class, 'home'])->name('home.page');
+
 // =========================================================================
 // HOTEL WEBSITE & GUEST BOOKING ROUTES (Public)
 // =========================================================================
 
 // Hotel main website
-Route::get('/hotel', [GuestBookingController::class, 'index'])->name('guest.home');
+Route::get('/hotel', [GuestBookingController::class, 'home'])->name('guest.home');
 
-// Guest booking process
+// Guest booking process - AJAX routes
 Route::prefix('hotel')->group(function () {
     // Check availability
     Route::post('/check-availability', [GuestBookingController::class, 'checkAvailability'])->name('guest.check-availability');
@@ -149,7 +152,7 @@ Route::middleware('auth')->group(function () {
             return redirect()->route('reservations.index', ['check_in_date' => $checkInDate]);
         })->name('bookings.index');
     });
-    
+    Route::get('/debug-email/{reservation_id}', [GuestBookingController::class, 'debugEmail']);
     // =====================================================================
     // ROOMS ROUTES
     // =====================================================================
@@ -316,6 +319,25 @@ Route::middleware('auth')->group(function () {
 });
 
 // =========================================================================
+// PUBLIC GUEST BOOKING ROUTES
+// =========================================================================
+
+// Add these AJAX routes for the home page booking modal
+Route::prefix('booking')->group(function () {
+    // Available rooms AJAX
+    Route::post('/available-rooms', [ReservationController::class, 'getAvailableRooms'])->name('guest.booking.available-rooms');
+    
+    // Check email availability
+    Route::post('/check-email', [ReservationController::class, 'checkEmail'])->name('guest.booking.check-email');
+    
+    // Confirm booking (from modal)
+    Route::post('/confirm', [GuestBookingController::class, 'confirmBooking'])->name('guest.booking.confirm');
+    
+    // Process payment (from modal)
+    Route::post('/process-payment', [GuestBookingController::class, 'processPayment'])->name('guest.booking.process-payment');
+});
+
+// =========================================================================
 // PUBLIC REPORT ROUTES (for shared reports via link)
 // =========================================================================
 Route::prefix('public')->group(function () {
@@ -338,9 +360,6 @@ Route::prefix('api')->middleware(['auth', 'throttle:60,1'])->group(function () {
     Route::get('/reports/list', [ReportController::class, 'listReports'])->name('api.reports.list');
 });
 
-Route::get('/home', function () {
-    return view('home'); 
-})->name('home.page');
 // =========================================================================
 // FALLBACK ROUTE - 404 PAGE
 // =========================================================================
