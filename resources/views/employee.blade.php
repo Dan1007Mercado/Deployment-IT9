@@ -6,7 +6,10 @@
 
     <!-- Main Content -->
     <main class="flex-1 bg-[#f8fafc]">
-        @include('components.topnav', ['title' => 'Employee Management'])
+    @include('components.topnav', [
+            'title' => 'Employee Management',
+            'subtitle' => 'Manage Employees and Accounts'
+        ])
 
         <!-- Add Employee Modal -->
         <div id="employeeModal" class="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 hidden">

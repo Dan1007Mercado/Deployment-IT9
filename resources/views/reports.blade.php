@@ -6,7 +6,9 @@
 
     <!-- Main Content -->
     <main class="flex-1 bg-[#f8fafc]">
-        @include('components.topnav', ['title' => 'Reports & Analytics'])
+        @include('components.topnav', ['title' => 'Reports & Analytics',
+            'subtitle' => 'Manage Reports History and Generation'])
+        
 
         <!-- Reports Content -->
         <div class="px-8 py-6">
