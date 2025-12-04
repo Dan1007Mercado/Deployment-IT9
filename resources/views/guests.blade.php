@@ -85,9 +85,6 @@
                             <option value="">All Payment Methods</option>
                             <option value="cash" {{ request('method') == 'cash' ? 'selected' : '' }}>Cash</option>
                             <option value="credit_card" {{ request('method') == 'credit_card' ? 'selected' : '' }}>Credit Card</option>
-                            <option value="debit_card" {{ request('method') == 'debit_card' ? 'selected' : '' }}>Debit Card</option>
-                            <option value="gcash" {{ request('method') == 'gcash' ? 'selected' : '' }}>GCash</option>
-                            <option value="paymaya" {{ request('method') == 'paymaya' ? 'selected' : '' }}>PayMaya</option>
                         </select>
                     </form>
                 </div>

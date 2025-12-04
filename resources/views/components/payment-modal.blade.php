@@ -337,11 +337,6 @@ function closePaymentModal() {
     }, 300);
 }
 
-function closeQRCode() {
-    const qrSection = document.getElementById('qr-code-section');
-    qrSection.classList.add('hidden');
-}
-
 function processCashPayment() {
     if (!currentReservation) return;
     
@@ -404,6 +399,16 @@ function processOnlinePayment() {
     formData.append('reservation_id', currentReservation.reservation_id);
     formData.append('_token', '{{ csrf_token() }}');
 
+    // Show loading state in the modal
+    const content = document.getElementById('payment-content');
+    const originalContent = content.innerHTML;
+    content.innerHTML = `
+        <div class="flex flex-col items-center justify-center py-12 space-y-4">
+            <div class="animate-spin rounded-full h-16 w-16 border-4 border-blue-200 border-t-blue-600"></div>
+            <p class="text-gray-600">Creating Stripe payment session...</p>
+        </div>
+    `;
+
     fetch('/payments/process-online', {
         method: 'POST',
         body: formData
@@ -411,37 +416,41 @@ function processOnlinePayment() {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            // Show QR code section
-            const qrSection = document.getElementById('qr-code-section');
-            qrSection.classList.remove('hidden');
-            setTimeout(() => {
-                qrSection.querySelector('.transform').classList.remove('scale-95');
-                qrSection.querySelector('.transform').classList.add('scale-100');
-            }, 10);
+            // Create URL for QR code page
+            const qrCodeUrl = new URL('{{ route("payments.qr-code-display") }}');
+            qrCodeUrl.searchParams.set('payment_url', data.payment_url);
+            qrCodeUrl.searchParams.set('session_id', data.session_id);
+            qrCodeUrl.searchParams.set('reservation_id', data.reservation_id || currentReservation.reservation_id);
+            qrCodeUrl.searchParams.set('amount', data.amount || currentReservation.total_amount);
             
-            if (data.qr_code_url) {
-                document.getElementById('qr-code-image').src = data.qr_code_url;
-            }
-            document.getElementById('direct-payment-link').href = data.payment_url;
+            // Close the payment modal first
+            closePaymentModal();
+            
+            // Open QR code page in new tab
+            const newWindow = window.open(qrCodeUrl.toString(), '_blank');
+            
+            // Show success message
+            setTimeout(() => {
+                if (newWindow) {
+                    alert('✅ Payment session created! QR code page opened in new tab.\n\nShow this QR code to the guest for payment.');
+                } else {
+                    alert('✅ Payment session created! Please allow pop-ups to view the QR code.\n\nPayment URL: ' + data.payment_url);
+                }
+            }, 500);
+            
         } else {
+            // Restore content and show error
+            content.innerHTML = originalContent;
             alert('❌ ' + data.message);
         }
     })
     .catch(error => {
         console.error('Error:', error);
+        content.innerHTML = originalContent;
         alert('❌ Failed to create payment session: ' + error.message);
     });
 }
 
-function copyPaymentLink() {
-    const paymentLink = document.getElementById('direct-payment-link').href;
-    navigator.clipboard.writeText(paymentLink).then(function() {
-        alert('Payment link copied to clipboard!');
-    }, function(err) {
-        console.error('Could not copy text: ', err);
-        alert('Failed to copy link');
-    });
-}
 
 function showSuccessMessage(message) {
     alert('✅ ' + message);
@@ -456,10 +465,5 @@ document.getElementById('payment-modal').addEventListener('click', function(e) {
     }
 });
 
-// Close QR code when clicking outside
-document.getElementById('qr-code-section').addEventListener('click', function(e) {
-    if (e.target.id === 'qr-code-section') {
-        closeQRCode();
-    }
-});
+
 </script>

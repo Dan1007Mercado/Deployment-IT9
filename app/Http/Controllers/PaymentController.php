@@ -9,6 +9,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Services\StripePaymentService;
 use App\Services\GmailService;
+use Carbon\Carbon;
+use Illuminate\Support\Facades\Log;
 
 class PaymentController extends Controller
 {
@@ -24,6 +26,20 @@ class PaymentController extends Controller
         try {
             $reservation->load(['guest', 'roomType', 'bookings.rooms.room']);
             
+            // Calculate nights
+            $checkIn = Carbon::parse($reservation->check_in_date);
+            $checkOut = Carbon::parse($reservation->check_out_date);
+            $nights = $checkIn->diffInDays($checkOut);
+            
+            // Get room numbers from relationships
+            $roomNumbers = [];
+            foreach($reservation->bookings as $booking) {
+                foreach($booking->rooms as $bookingRoom) {
+                    $roomNumbers[] = $bookingRoom->room->room_number;
+                }
+            }
+            $roomNumbersString = implode(', ', array_unique($roomNumbers));
+            
             return response()->json([
                 'success' => true,
                 'reservation' => [
@@ -36,12 +52,13 @@ class PaymentController extends Controller
                     ],
                     'check_in_date' => $reservation->check_in_date->format('M j, Y'),
                     'check_out_date' => $reservation->check_out_date->format('M j, Y'),
-                    'nights' => $reservation->nights,
+                    'nights' => $nights,
                     'total_amount' => $reservation->total_amount,
-                    'room_numbers' => $reservation->room_numbers,
+                    'room_numbers' => $roomNumbersString,
                 ]
             ]);
         } catch (\Exception $e) {
+            Log::error('Get payment details error: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to load reservation details'
@@ -105,7 +122,7 @@ class PaymentController extends Controller
 
         } catch (\Exception $e) {
             DB::rollBack();
-            \Log::error('Cash payment error: ' . $e->getMessage());
+            Log::error('Cash payment error: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to process payment: ' . $e->getMessage()
@@ -166,7 +183,7 @@ class PaymentController extends Controller
 
         } catch (\Exception $e) {
             DB::rollBack();
-            \Log::error('Card payment error: ' . $e->getMessage());
+            Log::error('Card payment error: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to process payment: ' . $e->getMessage()
@@ -175,7 +192,7 @@ class PaymentController extends Controller
     }
 
     /**
-     * Process online payment with Stripe and generate QR code
+     * Process online payment with Stripe
      */
     public function processOnlinePayment(Request $request, StripePaymentService $stripeService)
     {
@@ -201,7 +218,7 @@ class PaymentController extends Controller
                 throw new \Exception($stripeResult['error']);
             }
 
-            // Create pending payment record
+            // Create pending payment record WITHOUT QR CODE
             $payment = Payment::create([
                 'booking_id' => $reservation->bookings->first()->booking_id,
                 'amount' => $reservation->total_amount,
@@ -209,7 +226,6 @@ class PaymentController extends Controller
                 'payment_status' => 'pending',
                 'transaction_id' => $stripeResult['session_id'],
                 'stripe_payment_url' => $stripeResult['payment_url'],
-                'qr_code_path' => $stripeResult['qr_code'],
                 'payment_date' => null
             ]);
 
@@ -217,16 +233,17 @@ class PaymentController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Online payment session created. Show the QR code to the guest.',
+                'message' => 'Online payment session created.',
                 'payment_url' => $stripeResult['payment_url'],
-                'qr_code_url' => asset('storage/' . $stripeResult['qr_code']),
                 'session_id' => $stripeResult['session_id'],
-                'payment_id' => $payment->payment_id
+                'payment_id' => $payment->payment_id,
+                'amount' => $reservation->total_amount,
+                'reservation_id' => $reservation->reservation_id
             ]);
 
         } catch (\Exception $e) {
             DB::rollBack();
-            \Log::error('Online payment initiation error: ' . $e->getMessage());
+            Log::error('Online payment initiation error: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to create payment session: ' . $e->getMessage()
@@ -275,7 +292,7 @@ class PaymentController extends Controller
 
                         DB::commit();
 
-                        return view('payments.stripe-success', [
+                        return view('components.payments.stripe-success', [
                             'reservation' => $reservation,
                             'payment' => $payment,
                             'emailSent' => $emailSent
@@ -283,8 +300,8 @@ class PaymentController extends Controller
 
                     } catch (\Exception $e) {
                         DB::rollBack();
-                        \Log::error('Stripe success processing error: ' . $e->getMessage());
-                        return view('payments.stripe-error', [
+                        Log::error('Stripe success processing error: ' . $e->getMessage());
+                        return view('components.payments.stripe-error', [
                             'message' => 'Failed to process payment confirmation: ' . $e->getMessage()
                         ]);
                     }
@@ -292,7 +309,7 @@ class PaymentController extends Controller
             }
         }
 
-        return redirect()->route('payment.stripe.cancel');
+        return redirect()->route('payments.stripe.cancel'); // FIXED: Changed from 'payment.stripe.cancel'
     }
 
     /**
@@ -313,7 +330,7 @@ class PaymentController extends Controller
     }
 
     /**
-     * Get QR code for existing online payment
+     * Get payment information for existing online payment
      */
     public function getPaymentQRCode(Request $request)
     {
@@ -329,10 +346,16 @@ class PaymentController extends Controller
                 ->latest()
                 ->first();
 
-            if ($payment && $payment->qr_code_path) {
+            if ($payment && $payment->stripe_payment_url) {
+                // Return payment information for QR code display page
                 return response()->json([
                     'success' => true,
-                    'qr_code_url' => asset('storage/' . $payment->qr_code_path),
+                    'redirect_url' => route('payments.qr-code-display', [
+                        'payment_url' => $payment->stripe_payment_url,
+                        'session_id' => $payment->transaction_id,
+                        'reservation_id' => $reservation->reservation_id,
+                        'amount' => $payment->amount
+                    ]),
                     'payment_url' => $payment->stripe_payment_url,
                     'session_id' => $payment->transaction_id
                 ]);
@@ -344,10 +367,10 @@ class PaymentController extends Controller
             ], 404);
 
         } catch (\Exception $e) {
-            \Log::error('Get QR code error: ' . $e->getMessage());
+            Log::error('Get payment QR error: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to retrieve QR code: ' . $e->getMessage()
+                'message' => 'Failed to retrieve payment information: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -408,7 +431,7 @@ class PaymentController extends Controller
             ]);
 
         } catch (\Exception $e) {
-            \Log::error('Check payment status error: ' . $e->getMessage());
+            Log::error('Check payment status error: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to check payment status: ' . $e->getMessage()
@@ -431,11 +454,11 @@ class PaymentController extends Controller
             );
         } catch (\UnexpectedValueException $e) {
             // Invalid payload
-            \Log::error('Stripe webhook invalid payload: ' . $e->getMessage());
+            Log::error('Stripe webhook invalid payload: ' . $e->getMessage());
             return response()->json(['error' => 'Invalid payload'], 400);
         } catch (\Stripe\Exception\SignatureVerificationException $e) {
             // Invalid signature
-            \Log::error('Stripe webhook invalid signature: ' . $e->getMessage());
+            Log::error('Stripe webhook invalid signature: ' . $e->getMessage());
             return response()->json(['error' => 'Invalid signature'], 400);
         }
 
@@ -454,7 +477,7 @@ class PaymentController extends Controller
                 $this->handleExpiredSession($session);
                 break;
             default:
-                \Log::info('Received unhandled event type: ' . $event->type);
+                Log::info('Received unhandled event type: ' . $event->type);
         }
 
         return response()->json(['status' => 'success']);
@@ -490,11 +513,11 @@ class PaymentController extends Controller
                 $this->sendPaymentEmail($reservation, $payment);
 
                 DB::commit();
-                \Log::info('Payment completed via webhook for session: ' . $session->id);
+                Log::info('Payment completed via webhook for session: ' . $session->id);
             }
         } catch (\Exception $e) {
             DB::rollBack();
-            \Log::error('Webhook session completion error: ' . $e->getMessage());
+            Log::error('Webhook session completion error: ' . $e->getMessage());
         }
     }
 
@@ -511,44 +534,44 @@ class PaymentController extends Controller
                     'payment_status' => 'expired'
                 ]);
 
-                \Log::info('Payment expired via webhook for session: ' . $session->id);
+                Log::info('Payment expired via webhook for session: ' . $session->id);
             }
         } catch (\Exception $e) {
-            \Log::error('Webhook session expiration error: ' . $e->getMessage());
+            Log::error('Webhook session expiration error: ' . $e->getMessage());
         }
     }
 
     /**
-     * ADD THIS METHOD - Send payment confirmation email
+     * Send payment confirmation email
      */
     private function sendPaymentEmail($reservation, $payment)
     {
         try {
-            \Log::info('Attempting to send payment confirmation email for reservation: ' . $reservation->reservation_id);
+            Log::info('Attempting to send payment confirmation email for reservation: ' . $reservation->reservation_id);
             
             // Reload relationships to ensure we have fresh data
             $reservation->load(['guest', 'roomType', 'bookings.rooms.room']);
             
             // Check if GmailService is authenticated
             if (!$this->gmailService->isAuthenticated()) {
-                \Log::warning('GmailService not authenticated - skipping email');
+                Log::warning('GmailService not authenticated - skipping email');
                 return false;
             }
 
-            \Log::info('GmailService authenticated, sending payment confirmed email...');
-            $result = $this->gmailService->sendPaymentConfirmedEmail($reservation, $reservation->guest, $payment);
+            Log::info('GmailService authenticated, sending payment confirmed email...');
+           $result = $this->gmailService->sendPaymentConfirmedEmail($reservation, $reservation->guest, $payment);
             
             if ($result) {
-                \Log::info('Payment confirmation email sent successfully to: ' . $reservation->guest->email);
+                Log::info('Payment confirmation email sent successfully to: ' . $reservation->guest->email);
             } else {
-                \Log::warning('Payment confirmation email failed (returned false) for: ' . $reservation->guest->email);
+                Log::warning('Payment confirmation email failed (returned false) for: ' . $reservation->guest->email);
             }
             
             return $result;
 
         } catch (\Exception $e) {
-            \Log::error('Payment email error for reservation ' . $reservation->reservation_id . ': ' . $e->getMessage());
-            \Log::error('Email exception trace: ' . $e->getTraceAsString());
+            Log::error('Payment email error for reservation ' . $reservation->reservation_id . ': ' . $e->getMessage());
+            Log::error('Email exception trace: ' . $e->getTraceAsString());
             return false;
         }
     }

@@ -20,7 +20,7 @@ use App\Http\Controllers\GuestCheckController;
 */
 
 // =========================================================================
-// PUBLIC ROUTES
+// PUBLIC ROUTES (No Authentication Required)
 // =========================================================================
 
 // Default route (login page)
@@ -30,6 +30,30 @@ Route::get('/', function () {
 
 // Home page with room types
 Route::get('/home', [GuestBookingController::class, 'home'])->name('home.page');
+
+// =========================================================================
+// STRIPE PAYMENT CALLBACK ROUTES (PUBLIC - Accessed by Stripe)
+// =========================================================================
+Route::prefix('payments')->group(function () {
+    // QR Code Display (Public - no auth)
+    Route::get('/qr-code-display', function(Request $request) {
+        return view('components.payments.qr-code-modal', [
+            'payment_url' => $request->get('payment_url'),
+            'session_id' => $request->get('session_id'),
+            'reservation_id' => $request->get('reservation_id'),
+            'amount' => $request->get('amount')
+        ]);
+    })->name('payments.qr-code-display');
+    
+    // Stripe success callback
+    Route::get('/stripe/success', [PaymentController::class, 'stripeSuccess'])->name('payments.stripe.success');
+    
+    // Stripe cancel callback
+    Route::get('/stripe/cancel', [PaymentController::class, 'stripeCancel'])->name('payments.stripe.cancel');
+});
+
+// Stripe Webhook (Public - called by Stripe servers)
+Route::post('/stripe/webhook', [PaymentController::class, 'handleWebhook'])->withoutMiddleware(['csrf']);
 
 // =========================================================================
 // HOTEL WEBSITE & GUEST BOOKING ROUTES (Public)
@@ -152,7 +176,7 @@ Route::middleware('auth')->group(function () {
             return redirect()->route('reservations.index', ['check_in_date' => $checkInDate]);
         })->name('bookings.index');
     });
-    Route::get('/debug-email/{reservation_id}', [GuestBookingController::class, 'debugEmail']);
+    
     // =====================================================================
     // ROOMS ROUTES
     // =====================================================================
@@ -164,7 +188,7 @@ Route::middleware('auth')->group(function () {
     });
 
     // =====================================================================
-    // PAYMENT ROUTES
+    // PAYMENT PROCESSING ROUTES (Protected - Staff Only)
     // =====================================================================
     Route::prefix('payments')->group(function () {
         // Payment details
@@ -174,15 +198,14 @@ Route::middleware('auth')->group(function () {
         Route::post('/process-cash', [PaymentController::class, 'processCashPayment'])->name('payments.process-cash');
         Route::post('/process-card', [PaymentController::class, 'processCardPayment'])->name('payments.process-card');
         
-        // Stripe Online Payment Routes
+        // Stripe Online Payment Initiation
         Route::post('/process-online', [PaymentController::class, 'processOnlinePayment'])->name('payments.process-online');
-        Route::get('/stripe/success', [PaymentController::class, 'stripeSuccess'])->name('payments.stripe.success');
-        Route::get('/stripe/cancel', [PaymentController::class, 'stripeCancel'])->name('payments.stripe.cancel');
-        Route::get('/qrcode', [PaymentController::class, 'getPaymentQRCode'])->name('payments.qrcode');
-        Route::get('/check-status', [PaymentController::class, 'checkPaymentStatus'])->name('payments.check-status');
         
-        // Stripe Webhook
-        Route::post('/stripe/webhook', [PaymentController::class, 'handleWebhook'])->withoutMiddleware(['csrf']);
+        // Get existing payment QR code
+        Route::get('/qrcode', [PaymentController::class, 'getPaymentQRCode'])->name('payments.qrcode');
+        
+        // Check payment status
+        Route::get('/check-status', [PaymentController::class, 'checkPaymentStatus'])->name('payments.check-status');
     });
 
     // =====================================================================
