@@ -51,7 +51,31 @@ Route::prefix('payments')->group(function () {
     // Stripe cancel callback
     Route::get('/stripe/cancel', [PaymentController::class, 'stripeCancel'])->name('payments.stripe.cancel');
 });
+Route::get('/oauth2callback', function(Request $request) {
+    $code = $request->query('code');
 
+    if (!$code) {
+        return 'No authorization code received';
+    }
+
+    $client = new Google_Client();
+    $client->setAuthConfig(storage_path('app/credentials.json'));
+    $client->setRedirectUri('http://localhost:8000/oauth2callback'); // must match Google Cloud
+    $client->setAccessType('offline');
+    $client->setScopes([Google_Service_Gmail::GMAIL_SEND]);
+
+    // Exchange code for token
+    $accessToken = $client->fetchAccessTokenWithAuthCode($code);
+
+    // Save token for future use
+    $tokenPath = storage_path('app/gmail-token.json');
+    if (!file_exists(dirname($tokenPath))) {
+        mkdir(dirname($tokenPath), 0700, true);
+    }
+    file_put_contents($tokenPath, json_encode($accessToken));
+
+    return 'Gmail authorization successful! Token saved.';
+});
 // Stripe Webhook (Public - called by Stripe servers)
 Route::post('/stripe/webhook', [PaymentController::class, 'handleWebhook'])->withoutMiddleware(['csrf']);
 

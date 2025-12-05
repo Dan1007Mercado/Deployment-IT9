@@ -119,9 +119,13 @@
     <main>
         {{-- Hero Section --}}
         <section class="relative h-[70vh] min-h-[500px] flex items-center justify-center overflow-hidden">
-            <div class="absolute inset-0 bg-cover bg-center" style="background-image: url('{{ asset('images/hero-hotel.jpg') }}')">
-                <div class="absolute inset-0 bg-gradient-to-r from-blue-900/95 to-blue-800/70"></div>
-            </div>
+            @if(file_exists(public_path('images/hero-hotel.jpg')))
+                <div class="absolute inset-0 bg-cover bg-center" style="background-image: url('{{ asset('images/hero-hotel.jpg') }}')">
+                    <div class="absolute inset-0 bg-gradient-to-r from-blue-950/85 to-blue-900/60"></div>
+                </div>
+            @else
+                <div class="absolute inset-0 bg-gradient-to-r from-blue-900 to-blue-700"></div>
+            @endif
             
             <div class="relative z-10 text-center px-4 max-w-4xl mx-auto">
                 <h1 class="text-4xl md:text-6xl font-bold text-white mb-6 animate-fade-in">
@@ -130,7 +134,7 @@
                 <p class="text-lg md:text-xl text-blue-100 mb-8 max-w-2xl mx-auto">
                     Experience luxury and comfort in the heart of the city. Book your perfect stay today.
                 </p>
-                <a href="#rooms" class="inline-flex items-center justify-center rounded-md text-lg px-8 py-6 bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-lg hover-lift">
+                <a href="#rooms" class="inline-flex items-center justify-center rounded-md text-lg px-8 py-6 bg-blue-700 text-white hover:bg-blue-800 transition-colors shadow-lg hover-lift">
                     Explore Our Rooms
                 </a>
             </div>
@@ -164,11 +168,21 @@
                         <div class="overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-200 bg-white rounded-lg hover-lift animate-slide-up" 
                              style="animation-delay: {{ $loop->index * 0.1 }}s;">
                             <div class="relative h-56 overflow-hidden">
-                                <div class="w-full h-full bg-gradient-to-br from-blue-100 to-blue-300 flex items-center justify-center">
-                                    <svg class="w-24 h-24 text-blue-200" fill="currentColor" viewBox="0 0 20 20">
-                                        <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"/>
-                                    </svg>
-                                </div>
+                                @php
+                                    $imageName = strtolower(str_replace(' ', '-', $roomType->type_name)) . '.jpg';
+                                    $imagePath = 'images/rooms/' . $imageName;
+                                @endphp
+                                @if(file_exists(public_path($imagePath)))
+                                    <img src="{{ asset($imagePath) }}" 
+                                         alt="{{ $roomType->type_name }}"
+                                         class="w-full h-full object-cover">
+                                @else
+                                    <div class="w-full h-full bg-gradient-to-br from-blue-100 to-blue-300 flex items-center justify-center">
+                                        <svg class="w-24 h-24 text-blue-200" fill="currentColor" viewBox="0 0 20 20">
+                                            <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"/>
+                                        </svg>
+                                    </div>
+                                @endif
                                 <!-- Price Tag -->
                                 <div class="absolute top-4 right-4 bg-white px-3 py-1.5 rounded-lg shadow-sm">
                                     <span class="text-xl font-bold text-blue-600">₱{{ number_format($roomType->base_price) }}</span>
@@ -214,7 +228,7 @@
                                 
                                 <button 
                                     onclick="startBooking({{ $roomType->room_type_id }})"
-                                    class="w-full inline-flex items-center justify-center rounded-md px-4 py-2.5 bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-sm hover:shadow-md hover-lift text-sm"
+                                    class="w-full inline-flex items-center justify-center rounded-md px-4 py-2.5 bg-blue-700 text-white hover:bg-blue-800 transition-colors shadow-sm hover:shadow-md hover-lift text-sm"
                                 >
                                     <i data-lucide="calendar" class="h-4 w-4 mr-2"></i>
                                     Book Now
@@ -326,7 +340,7 @@
 
                 <div class="flex justify-end pt-4">
                     <button onclick="checkAvailabilityAndProceed()" 
-                            class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                            class="px-6 py-2 bg-blue-700 text-white rounded-lg hover:bg-blue-800 transition-colors">
                         Next: Select Rooms
                     </button>
                 </div>
@@ -911,7 +925,7 @@
                         </svg>
                         <h3 class="text-lg font-medium">No rooms available</h3>
                         <p class="mt-2">No rooms of this type are available for the selected dates.</p>
-                        <button onclick="showGuestDatesModal()" class="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                        <button onclick="showGuestDatesModal()" class="mt-4 px-4 py-2 bg-blue-700 text-white rounded-lg hover:bg-blue-800">
                             Choose Different Dates
                         </button>
                     </div>
@@ -1005,10 +1019,10 @@
             if (selectedRooms.length === maxRoomsToSelect) {
                 proceedBtn.disabled = false;
                 proceedBtn.classList.remove('bg-gray-300', 'text-gray-500', 'cursor-not-allowed');
-                proceedBtn.classList.add('bg-blue-600', 'text-white', 'hover:bg-blue-700');
+                proceedBtn.classList.add('bg-blue-700', 'text-white', 'hover:bg-blue-800');
             } else {
                 proceedBtn.disabled = true;
-                proceedBtn.classList.remove('bg-blue-600', 'text-white', 'hover:bg-blue-700');
+                proceedBtn.classList.remove('bg-blue-700', 'text-white', 'hover:bg-blue-800');
                 proceedBtn.classList.add('bg-gray-300', 'text-gray-500', 'cursor-not-allowed');
             }
         }
