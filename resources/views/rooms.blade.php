@@ -116,8 +116,21 @@
                 @foreach($rooms as $room)
                 <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden room-card" data-status="{{ $room->room_status }}">
                     <div class="relative">
-                        <img src="{{ $room->image_path ? Storage::url($room->image_path) : 'https://images.unsplash.com/photo-1611892440504-42a792e24d32?w=300&h=150&fit=crop' }}" 
-                             alt="Room {{ $room->room_number }}" class="w-full h-32 object-cover">
+                        @php
+                            $imageName = strtolower(str_replace(' ', '-', $room->roomType->type_name)) . '.jpg';
+                            $imagePath = 'images/rooms/' . $imageName;
+                        @endphp
+                        @if(file_exists(public_path($imagePath)))
+                            <img src="{{ asset($imagePath) }}" 
+                                 alt="Room {{ $room->room_number }}" 
+                                 class="w-full h-32 object-cover">
+                        @else
+                            <div class="w-full h-32 bg-gradient-to-br from-blue-100 to-blue-300 flex items-center justify-center">
+                                <svg class="w-16 h-16 text-blue-200" fill="currentColor" viewBox="0 0 20 20">
+                                    <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"/>
+                                </svg>
+                            </div>
+                        @endif
                         
                     </div>
                     <div class="p-3">

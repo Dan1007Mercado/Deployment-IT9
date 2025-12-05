@@ -551,23 +551,43 @@
         rooms.forEach(room => {
             const isSelected = selectedRooms.some(r => r.room_id === room.room_id);
             const roomElement = document.createElement('div');
-            roomElement.className = `border rounded-lg p-4 cursor-pointer transition-colors ${
-                isSelected ? 'border-green-500 bg-green-50' : 'border-gray-200 hover:border-blue-300'
+            roomElement.className = `border rounded-lg overflow-hidden cursor-pointer transition-all duration-200 ${
+                isSelected ? 'border-green-500 bg-green-50' : 'border-gray-200 hover:border-blue-300 hover:shadow-md'
             }`;
+            
+            // Generate room type image path
+            const roomTypeName = room.room_type.toLowerCase().replace(/\s+/g, '-');
+            const imagePath = `/images/rooms/${roomTypeName}.jpg`;
+            
             roomElement.innerHTML = `
-                <div class="flex justify-between items-start">
-                    <div>
-                        <h4 class="font-semibold text-lg">${room.room_number}</h4>
-                        <p class="text-sm text-gray-600">Floor ${room.floor}</p>
-                        <p class="text-lg font-bold text-green-600 mt-2">₱${room.price.toLocaleString()}/night</p>
+                <div class="relative h-32 overflow-hidden bg-gradient-to-br from-blue-100 to-blue-300">
+                    <img src="${imagePath}" 
+                         alt="${room.room_type}" 
+                         class="w-full h-full object-cover"
+                         onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                    <div class="absolute inset-0 hidden items-center justify-center bg-gradient-to-br from-blue-100 to-blue-300">
+                        <svg class="w-16 h-16 text-blue-200" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"/>
+                        </svg>
                     </div>
-                    <div class="flex items-center">
+                    <div class="absolute top-2 right-2">
                         <input type="checkbox" ${isSelected ? 'checked' : ''} 
                                onchange="toggleRoomSelection(${room.room_id}, '${room.room_number}', ${room.price}, this.checked)"
                                class="w-5 h-5 text-blue-600 rounded focus:ring-blue-500">
                     </div>
+                    <div class="absolute bottom-2 left-2 px-2 py-1 rounded-full text-xs font-semibold bg-white/90 text-gray-700">
+                        Floor ${room.floor}
+                    </div>
                 </div>
-                ${room.image_path ? `<img src="${room.image_path}" alt="${room.room_number}" class="mt-3 rounded h-24 w-full object-cover">` : ''}
+                <div class="p-4">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <h4 class="font-semibold text-lg">Room ${room.room_number}</h4>
+                            <p class="text-sm text-gray-600">${room.room_type}</p>
+                            <p class="text-lg font-bold text-green-600 mt-2">₱${room.price.toLocaleString()}/night</p>
+                        </div>
+                    </div>
+                </div>
             `;
             container.appendChild(roomElement);
         });
