@@ -3,7 +3,7 @@ FROM php:8.2-apache
 
 # Install required Php extension for Laravel
 RUN apt-get update && apt-get install -y \
-    git unzip libpq-dev zip \
+    git unzip libpq-dev zip libzip-dev \
     && docker-php-ext-install pdo pdo_mysql pdo_pgsql zip
 
 # Enable Apache mod_rewrite (needed for laravel routes)
@@ -35,6 +35,9 @@ COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 # Set proper permissions for Laravel
 RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache \
     && chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
+
+# Clean up to reduce image size
+RUN apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Expose render's required port
 EXPOSE 10000
