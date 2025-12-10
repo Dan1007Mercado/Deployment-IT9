@@ -3,7 +3,7 @@ FROM php:8.2-apache
 
 # Install required PHP extensions for Laravel
 RUN apt-get update && apt-get install -y \
-    git unzip libpq-dev zip \
+    git unzip libpq-dev libzip-dev zip \
     && docker-php-ext-install pdo pdo_mysql pdo_pgsql zip \
     && rm -rf /var/lib/apt/lists/*
 
@@ -19,21 +19,17 @@ WORKDIR /var/www/html
 # Copy application code
 COPY . /var/www/html
 
-# Set permissions for storage and cache
-RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
-
-# Create uploads folder and set permissions
-RUN mkdir -p /var/www/html/public/uploads \
-    && chown -R www-data:www-data /var/www/html/public/uploads \
-    && chmod -R 775 /var/www/html/public/uploads
-
 # Install composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
-# Install PHP dependencies
+# Install Laravel dependencies
 RUN composer install --no-interaction --optimize-autoloader --no-dev
 
-# Expose port 10000 (Render expects your app to listen here)
+# Set permissions for storage, cache, and uploads
+RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache /var/www/html/public/uploads \
+    && chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache /var/www/html/public/uploads
+
+# Expose port 10000 (default Apache port)
 EXPOSE 10000
 
 # Start Apache
