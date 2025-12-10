@@ -17,8 +17,6 @@ RUN apt-get update && apt-get install -y \
     libcurl4-openssl-dev \
     # For dompdf (requires fontconfig)
     libfontconfig1 \
-    # For imagick (if using image processing)
-    # libmagickwand-dev \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install \
         pdo \
@@ -36,7 +34,6 @@ RUN apt-get update && apt-get install -y \
         tokenizer \
         xml \
         curl \
-        openssl \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
