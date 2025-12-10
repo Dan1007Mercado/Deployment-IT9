@@ -15,7 +15,6 @@ RUN apt-get update && apt-get install -y \
     libxml2-dev \
     libssl-dev \
     libcurl4-openssl-dev \
-    # For dompdf (requires fontconfig)
     libfontconfig1 \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install \
@@ -28,12 +27,7 @@ RUN apt-get update && apt-get install -y \
         exif \
         pcntl \
         bcmath \
-        ctype \
-        fileinfo \
-        json \
-        tokenizer \
         xml \
-        curl \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
