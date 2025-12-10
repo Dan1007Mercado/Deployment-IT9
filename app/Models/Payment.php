@@ -1,6 +1,4 @@
 <?php
-// app/Models/Payment.php
-
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -19,6 +17,9 @@ class Payment extends Model
         'transaction_id',
         'payment_status',
         'sandbox_reference',
+        'stripe_payment_url', // Make sure this field exists
+        'stripe_session_id',  // Make sure this field exists
+        'payment_date'
     ];
 
     protected $casts = [
@@ -28,5 +29,17 @@ class Payment extends Model
     public function booking()
     {
         return $this->belongsTo(Booking::class, 'booking_id');
+    }
+
+    // Accessor for formatted amount
+    public function getFormattedAmountAttribute()
+    {
+        return '₱' . number_format($this->amount, 2);
+    }
+
+    // Check if payment is successful
+    public function getIsPaidAttribute()
+    {
+        return $this->payment_status === 'completed' || $this->payment_status === 'paid';
     }
 }

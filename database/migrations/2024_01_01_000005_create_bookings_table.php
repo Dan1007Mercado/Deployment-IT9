@@ -17,7 +17,7 @@ return new class extends Migration
             $table->foreignId('room_id')->constrained('rooms', 'room_id');
             $table->timestamp('actual_check_in')->nullable();
             $table->timestamp('actual_check_out')->nullable();
-            $table->enum('booking_status', ['reserved', 'checked-in', 'checked-out', 'cancelled', 'no-show'])->default('reserved');
+            $table->enum('booking_status', ['reserved', 'checked-in', 'checked-out', 'cancelled', 'no-show','pending'])->default('reserved');
             $table->timestamp('booking_date')->useCurrent();
             $table->timestamps();
             $table->unique('reservation_id');

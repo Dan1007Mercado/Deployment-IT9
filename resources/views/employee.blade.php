@@ -18,6 +18,7 @@
                 <h2 class="text-xl font-semibold mb-6">Add New Employee</h2>
                 <form id="employeeForm" action="{{ route('users.store') }}" method="POST">
                     @csrf
+                    <input type="hidden" name="search" value="{{ $search ?? '' }}">
                     <div class="grid grid-cols-2 gap-6 mb-6">
                         <div>
                             <label class="block text-sm font-medium mb-1">First Name</label>
@@ -75,6 +76,7 @@
                     @csrf
                     @method('PUT')
                     <input type="hidden" name="user_id" id="edit_user_id">
+                    <input type="hidden" name="search" value="{{ $search ?? '' }}">
                     <div class="grid grid-cols-2 gap-6 mb-6">
                         <div>
                             <label class="block text-sm font-medium mb-1">First Name</label>
@@ -125,22 +127,34 @@
 
         <!-- Employee Content -->
         <div class="px-8 py-6">
-            <!-- Header Section -->
-            <div class="mb-6">
-                <h2 class="text-xl font-semibold mb-2">Employees</h2>
-                <p class="text-gray-500 text-sm">Manage hotel staff and their permissions</p>
-            </div>
-
+            
             <!-- Controls Section -->
             <div class="flex items-center justify-between mb-6">
                 <!-- Search -->
                 <div class="flex-1 max-w-md">
-                    <div class="relative">
-                        <input type="text" placeholder="Search employees..." class="w-full px-4 py-2 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        <svg class="absolute left-3 top-3 h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                        </svg>
-                    </div>
+                    <form method="GET" action="{{ route('users.index') }}" id="searchForm">
+                        <div class="relative">
+                            <input type="text" 
+                                   name="search" 
+                                   id="searchInput" 
+                                   value="{{ $search ?? '' }}" 
+                                   placeholder="Search employees..." 
+                                   class="w-full px-4 py-2 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                   autocomplete="off">
+                            <svg class="absolute left-3 top-3 h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            </svg>
+                            @if(!empty($search))
+                            <button type="button" 
+                                    onclick="clearSearch()" 
+                                    class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600">
+                                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                            @endif
+                        </div>
+                    </form>
                 </div>
 
                 <!-- Action Buttons -->
@@ -156,6 +170,21 @@
 
             <!-- Employees Table -->
             <div class="bg-white rounded-lg shadow overflow-hidden">
+                @if($users->isEmpty() && !empty($search))
+                <div class="text-center py-12">
+                    <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-6.396a9 9 0 01-18 0" />
+                    </svg>
+                    <h3 class="mt-2 text-sm font-medium text-gray-900">No employees found</h3>
+                    <p class="mt-1 text-sm text-gray-500">No employees match "{{ $search }}"</p>
+                    <div class="mt-6">
+                        <button onclick="clearSearch()" 
+                                class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                            Clear Search
+                        </button>
+                    </div>
+                </div>
+                @else
                 <table class="w-full">
                     <thead class="bg-gray-50 border-b border-gray-200">
                         <tr>
@@ -219,6 +248,7 @@
                                 <form action="{{ route('users.destroy', $user) }}" method="POST" class="inline" onsubmit="return confirm('Are you sure you want to delete this user?')">
                                     @csrf
                                     @method('DELETE')
+                                    <input type="hidden" name="search" value="{{ $search ?? '' }}">
                                     <button type="submit" class="text-red-600 hover:text-red-900" 
                                             {{ $user->id === auth()->id() ? 'disabled' : '' }}>
                                         <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -231,6 +261,7 @@
                         @endforeach
                     </tbody>
                 </table>
+                @endif
             </div>
         </div>
     </main>
@@ -245,8 +276,27 @@ document.addEventListener('DOMContentLoaded', function() {
     const closeModalBtn2 = document.getElementById('closeModalBtn2');
     const closeEditModalBtn = document.getElementById('closeEditModalBtn');
     const closeEditModalBtn2 = document.getElementById('closeEditModalBtn2');
-    const form = document.getElementById('employeeForm');
-    const editForm = document.getElementById('editEmployeeForm');
+    const searchInput = document.getElementById('searchInput');
+    const searchForm = document.getElementById('searchForm');
+    let searchTimeout;
+
+    // Auto-search with debounce (500ms delay)
+    if (searchInput && searchForm) {
+        searchInput.addEventListener('input', function() {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                searchForm.submit();
+            }, 500);
+        });
+    }
+
+    // Clear search function
+    window.clearSearch = function() {
+        if (searchInput) {
+            searchInput.value = '';
+            searchForm.submit();
+        }
+    }
 
     // New Employee Modal
     openModalBtn.addEventListener('click', function(e) {
@@ -277,7 +327,8 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('edit_is_active').checked = btn.dataset.isActive === '1';
             
             // Set form action
-            editForm.action = `/employee/${btn.dataset.userId}`;
+            const editForm = document.getElementById('editEmployeeForm');
+            editForm.action = `/employee/${btn.dataset.userId}?search={{ urlencode($search ?? '') }}`;
             
             editModal.classList.remove('hidden');
         }
@@ -295,8 +346,6 @@ document.addEventListener('DOMContentLoaded', function() {
         if (e.target === modal) modal.classList.add('hidden');
         if (e.target === editModal) editModal.classList.add('hidden');
     });
-
-    // Form submission handled by Laravel
 });
 </script>
 

@@ -39,26 +39,10 @@
         <!-- Stats Cards -->
         <div class="px-8 py-6">
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                <!-- Available Rooms Card -->
-                <a href="{{ route('rooms') }}" class="bg-white rounded-xl shadow p-6 cursor-pointer hover:shadow-lg transition-shadow block border-2 border-green-300">
-                    <div class="flex items-center justify-between">
-                        <div class="flex-1">
-                            <p class="text-sm font-medium text-gray-600">Available Rooms</p>
-                            <p class="text-xs text-gray-500 mt-1">{{ $occupied_rooms }} rooms currently occupied</p>
-                        </div>
-                        <div class="flex items-center space-x-2">
-                            <p class="text-2xl font-bold text-gray-900">{{ $available_rooms }}</p>
-                            <div class="p-3 bg-green-100 rounded-lg border border-green-200">
-                                <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
-                                </svg>
-                            </div>
-                        </div>
-                    </div>
-                </a>
+                
 
                 <!-- Today's Check-ins -->
-                <a href="{{ route('bookings.index') }}?check_in_date={{ today()->format('Y-m-d') }}" class="bg-white rounded-xl shadow p-6 cursor-pointer hover:shadow-lg transition-shadow block border-2 border-blue-300">
+                <a href="{{ route('guest-check.index') }}?check_in_date={{ today()->format('Y-m-d') }}&tabs=checkins" class="bg-white rounded-xl shadow p-6 cursor-pointer hover:shadow-lg transition-shadow block border-2 border-blue-300">
                     <div class="flex items-center justify-between">
                         <div class="flex-1">
                             <p class="text-sm font-medium text-gray-600">Today's Check-ins</p>
@@ -76,7 +60,7 @@
                 </a>
 
                 <!-- Today's Check-outs -->
-                <a href="{{ route('bookings.index') }}?check_out_date={{ today()->format('Y-m-d') }}" class="bg-white rounded-xl shadow p-6 cursor-pointer hover:shadow-lg transition-shadow block border-2 border-purple-300">
+                <a href="{{ route('guest-check.index') }}?check_out_date={{ today()->format('Y-m-d') }}&tabs=checkouts" class="bg-white rounded-xl shadow p-6 cursor-pointer hover:shadow-lg transition-shadow block border-2 border-purple-300">
                     <div class="flex items-center justify-between">
                         <div class="flex-1">
                             <p class="text-sm font-medium text-gray-600">Today's Check-outs</p>
@@ -94,7 +78,7 @@
                 </a>
 
                 <!-- Filtered Sales -->
-                <a href="{{ route('report') }}?start_date={{ $start_date }}&end_date={{ $end_date }}" class="bg-white rounded-xl shadow p-6 cursor-pointer hover:shadow-lg transition-shadow block border-2 border-green-300">
+                <a href="{{ route('guests') }}" class="bg-white rounded-xl shadow p-6 cursor-pointer hover:shadow-lg transition-shadow block border-2 border-green-300">
                     <div class="flex items-center justify-between">
                         <div class="flex-1">
                             <p class="text-sm font-medium text-gray-600">Filtered Sales</p>
@@ -110,29 +94,6 @@
                         </div>
                     </div>
                 </a>
-            </div>
-
-            <!-- Additional Stats Cards -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                <!-- Total Guests -->
-                <a href="{{ route('guests') }}" class="bg-white rounded-xl shadow p-6 cursor-pointer hover:shadow-lg transition-shadow block border-2 border-orange-300">
-                    <div class="flex items-center justify-between">
-                        <div class="flex-1">
-                            <p class="text-sm font-medium text-gray-600">Total Guests</p>
-                            <p class="text-xs text-gray-500 mt-1">Registered guests in system</p>
-                        </div>
-                        <div class="flex items-center space-x-2">
-                            <p class="text-2xl font-bold text-orange-600">{{ $total_guests }}</p>
-                            <div class="p-3 bg-orange-100 rounded-lg border border-orange-200">
-                                <svg class="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
-                                </svg>
-                            </div>
-                        </div>
-                    </div>
-                </a>
-
-                <!-- Total Reservations -->
                 <a href="{{ route('reservations.index') }}" class="bg-white rounded-xl shadow p-6 cursor-pointer hover:shadow-lg transition-shadow block border-2 border-indigo-300">
                     <div class="flex items-center justify-between">
                         <div class="flex-1">

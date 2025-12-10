@@ -15,60 +15,63 @@ class GuestCheckController extends Controller
         $today = $request->get('date', Carbon::today()->toDateString());
         $search = $request->get('search');
         
-        // Get today's check-ins with pagination
+        // Get today's check-ins (guests scheduled to check-in today)
         $checkInsQuery = Booking::with(['reservation.guest', 'rooms.room'])
             ->whereHas('reservation', function($query) use ($today, $search) {
                 $query->where('check_in_date', $today)
                       ->whereIn('status', ['confirmed', 'pending']);
                 
-                // Add search functionality
                 if ($search) {
-                    $query->whereHas('guest', function($q) use ($search) {
-                        $q->where('first_name', 'like', "%{$search}%")
-                          ->orWhere('last_name', 'like', "%{$search}%")
-                          ->orWhere('email', 'like', "%{$search}%");
-                    })
-                    ->orWhere('reservation_id', 'like', "%{$search}%");
+                    $query->where(function($q) use ($search) {
+                        $q->whereHas('guest', function($guestQuery) use ($search) {
+                            $guestQuery->where('first_name', 'like', "%{$search}%")
+                                      ->orWhere('last_name', 'like', "%{$search}%")
+                                      ->orWhere('email', 'like', "%{$search}%");
+                        })
+                        ->orWhere('reservation_id', 'like', "%{$search}%");
+                    });
                 }
             })
-            ->where('booking_status', 'reserved');
+            ->where('booking_status', 'reserved'); // Not checked in yet
 
         $checkIns = $checkInsQuery->paginate(10);
 
-        // Get today's check-outs with pagination
+        // Get today's check-outs (guests who ACTUALLY checked out today)
         $checkOutsQuery = Booking::with(['reservation.guest', 'rooms.room'])
-            ->whereHas('reservation', function($query) use ($today, $search) {
-                $query->where('check_out_date', $today)
-                      ->where('status', 'confirmed');
+            ->where('booking_status', 'checked-out')
+            ->whereDate('actual_check_out', $today)
+            ->whereHas('reservation', function($query) use ($search) {
+                $query->where('status', 'confirmed');
                 
-                // Add search functionality
                 if ($search) {
-                    $query->whereHas('guest', function($q) use ($search) {
-                        $q->where('first_name', 'like', "%{$search}%")
-                          ->orWhere('last_name', 'like', "%{$search}%")
-                          ->orWhere('email', 'like', "%{$search}%");
-                    })
-                    ->orWhere('reservation_id', 'like', "%{$search}%");
+                    $query->where(function($q) use ($search) {
+                        $q->whereHas('guest', function($guestQuery) use ($search) {
+                            $guestQuery->where('first_name', 'like', "%{$search}%")
+                                      ->orWhere('last_name', 'like', "%{$search}%")
+                                      ->orWhere('email', 'like', "%{$search}%");
+                        })
+                        ->orWhere('reservation_id', 'like', "%{$search}%");
+                    });
                 }
-            })
-            ->where('booking_status', 'checked-in');
+            });
 
         $checkOuts = $checkOutsQuery->paginate(10);
 
-        // Get currently checked-in guests with pagination
+        // Get currently checked-in guests
         $currentGuestsQuery = Booking::with(['reservation.guest', 'rooms.room'])
             ->where('booking_status', 'checked-in')
             ->whereHas('reservation', function($query) use ($search) {
                 $query->where('status', 'confirmed');
                 
-                // Add search functionality
                 if ($search) {
-                    $query->whereHas('guest', function($q) use ($search) {
-                        $q->where('first_name', 'like', "%{$search}%")
-                          ->orWhere('last_name', 'like', "%{$search}%")
-                          ->orWhere('email', 'like', "%{$search}%");
-                    })
-                    ->orWhere('reservation_id', 'like', "%{$search}%");
+                    $query->where(function($q) use ($search) {
+                        $q->whereHas('guest', function($guestQuery) use ($search) {
+                            $guestQuery->where('first_name', 'like', "%{$search}%")
+                                      ->orWhere('last_name', 'like', "%{$search}%")
+                                      ->orWhere('email', 'like', "%{$search}%");
+                        })
+                        ->orWhere('reservation_id', 'like', "%{$search}%");
+                    });
                 }
             });
 
@@ -146,42 +149,7 @@ class GuestCheckController extends Controller
             ], 500);
         }
     }
-    
-    public function home()
-    {
-        $roomTypes = RoomType::with(['rooms' => function($query) {
-            $query->where('room_status', 'available');
-        }])->get();
-        
-        return view('home', compact('roomTypes'));
-    }
 
-    public function confirmBooking(Request $request)
-    {
-        $request->validate([
-            'first_name' => 'required|string|max:100',
-            'last_name' => 'required|string|max:100',
-            'email' => 'required|email|max:150',
-            'contact_number' => 'required|string|max:20',
-            'check_in_date' => 'required|date|after:today',
-            'check_out_date' => 'required|date|after:check_in_date',
-            'num_guests' => 'required|integer|min:1',
-            'room_ids' => 'required|array|min:1',
-            'room_ids.*' => 'exists:rooms,room_id',
-            'total_amount' => 'required|numeric|min:0',
-            'payment_method' => 'required|in:cash,card,online'
-        ]);
-
-        // Add your existing reservation creation logic here
-        // This should be similar to ReservationController@store
-        
-        return response()->json([
-            'success' => true,
-            'message' => 'Reservation created successfully',
-            'payment_url' => null, // Set this for online payments
-            'reservation_id' => 123 // Return the created reservation ID
-        ]);
-    }
     public function quickCheckIn(Booking $booking)
     {
         return $this->checkIn($booking);

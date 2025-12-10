@@ -9,15 +9,23 @@ use Illuminate\Support\Facades\Storage;
 
 class RoomsController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
+        $search = $request->get('search', '');
+        
         $rooms = Room::with('roomType')
+            ->when($search, function($query, $search) {
+                return $query->where('room_number', 'like', "%{$search}%")
+                            ->orWhereHas('roomType', function($q) use ($search) {
+                                $q->where('type_name', 'like', "%{$search}%");
+                            });
+            })
             ->orderBy('room_number')
             ->get();
             
         $roomTypes = RoomType::all();
         
-        return view('rooms', compact('rooms', 'roomTypes'));
+        return view('rooms', compact('rooms', 'roomTypes', 'search'));
     }
 
     public function store(Request $request)
@@ -26,7 +34,6 @@ class RoomsController extends Controller
             'room_number' => 'required|string|max:10|unique:rooms,room_number',
             'room_type_id' => 'required|exists:room_types,room_type_id',
             'floor' => 'required|string|max:10',
-            'room_status' => 'required|in:available,occupied',
             'image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048'
         ]);
 
@@ -34,7 +41,7 @@ class RoomsController extends Controller
             'room_number' => $request->room_number,
             'room_type_id' => $request->room_type_id,
             'floor' => $request->floor,
-            'room_status' => $request->room_status,
+            'room_status' => 'available', // Default status
         ];
 
         // Handle image upload
@@ -45,7 +52,7 @@ class RoomsController extends Controller
 
         Room::create($roomData);
 
-        return redirect()->back()->with('success', 'Room added successfully!');
+        return redirect()->route('rooms', ['search' => $request->get('search')])->with('success', 'Room added successfully!');
     }
 
     public function update(Request $request, Room $room)
@@ -54,7 +61,6 @@ class RoomsController extends Controller
             'room_number' => 'required|string|max:10|unique:rooms,room_number,' . $room->room_id . ',room_id',
             'room_type_id' => 'required|exists:room_types,room_type_id',
             'floor' => 'required|string|max:10',
-            'room_status' => 'required|in:available,occupied',
             'image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048'
         ]);
 
@@ -62,7 +68,6 @@ class RoomsController extends Controller
             'room_number' => $request->room_number,
             'room_type_id' => $request->room_type_id,
             'floor' => $request->floor,
-            'room_status' => $request->room_status,
         ];
 
         // Handle image upload
@@ -77,10 +82,10 @@ class RoomsController extends Controller
 
         $room->update($roomData);
 
-        return redirect()->back()->with('success', 'Room updated successfully!');
+        return redirect()->route('rooms', ['search' => $request->get('search')])->with('success', 'Room updated successfully!');
     }
 
-    public function destroy(Room $room)
+    public function destroy(Room $room, Request $request)
     {
         // Delete image if exists
         if ($room->image_path) {
@@ -89,6 +94,6 @@ class RoomsController extends Controller
 
         $room->delete();
 
-        return redirect()->back()->with('success', 'Room deleted successfully!');
+        return redirect()->route('rooms', ['search' => $request->get('search')])->with('success', 'Room deleted successfully!');
     }
 }

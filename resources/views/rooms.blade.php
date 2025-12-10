@@ -19,6 +19,7 @@
                 <form id="roomForm" method="POST" enctype="multipart/form-data">
                     @csrf
                     <input type="hidden" id="room_id" name="room_id">
+                    <input type="hidden" name="search" value="{{ $search ?? '' }}">
                     <div class="grid grid-cols-2 gap-6 mb-6">
                         <div>
                             <label class="block text-sm font-medium mb-1">Room Number</label>
@@ -62,28 +63,50 @@
             <div class="bg-white rounded-lg shadow-lg w-full max-w-md p-6">
                 <h3 class="text-lg font-semibold mb-4">Confirm Delete</h3>
                 <p class="text-gray-600 mb-6">Are you sure you want to delete this room? This action cannot be undone.</p>
-                <div class="flex justify-end space-x-3">
-                    <button type="button" id="cancelDeleteBtn" class="px-4 py-2 rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-100">Cancel</button>
-                    <button type="button" id="confirmDeleteBtn" class="px-6 py-2 rounded-lg bg-red-600 text-white font-semibold hover:bg-red-700">Delete</button>
-                </div>
+                <form id="deleteForm" method="POST">
+                    @csrf
+                    @method('DELETE')
+                    <input type="hidden" name="search" value="{{ $search ?? '' }}">
+                    <div class="flex justify-end space-x-3">
+                        <button type="button" id="cancelDeleteBtn" class="px-4 py-2 rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-100">Cancel</button>
+                        <button type="submit" id="confirmDeleteBtn" class="px-6 py-2 rounded-lg bg-red-600 text-white font-semibold hover:bg-red-700">Delete</button>
+                    </div>
+                </form>
             </div>
         </div>
 
         <!-- Rooms Content -->
         <div class="px-8 py-6">
-            
-
             <!-- Controls -->
             <div class="flex items-center justify-between mb-6">
-                <div class="flex-1 max-w-md">
-                    <input type="text" id="searchInput" placeholder="Search by room no." class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
-                </div>
+                <!-- Search Form -->
+                <form method="GET" action="{{ route('rooms') }}" id="searchForm" class="flex-1 max-w-md">
+                    <div class="relative">
+                        <input type="text" 
+                               name="search" 
+                               id="searchInput" 
+                               value="{{ $search ?? '' }}"
+                               placeholder="Search by room number or type..." 
+                               class="w-full px-4 py-2 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                               autocomplete="off">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <svg class="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            </svg>
+                        </div>
+                        @if(!empty($search))
+                        <button type="button" 
+                                onclick="clearSearch()" 
+                                class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600">
+                            <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                        @endif
+                    </div>
+                </form>
+                
                 <div class="flex items-center space-x-3">
-                    <select id="statusFilter" class="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        <option value="">All Status</option>
-                        <option value="available">Available</option>
-                        <option value="occupied">Occupied</option>
-                    </select>
                     <button id="addRoomBtn" class="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
                         <svg class="h-5 w-5 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
@@ -94,21 +117,24 @@
             </div>
 
             <!-- Stats Cards -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                <div class="bg-white rounded-lg shadow p-4 border-l-4 border-green-500">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <!-- All Rooms Card -->
+                <div class="bg-white rounded-xl shadow p-6 border-2 border-blue-300">
                     <div class="flex items-center justify-between">
-                        <div>
-                            <p class="text-sm text-gray-600">All Rooms</p>
-                            <p class="text-2xl font-bold">{{ $rooms->where('room_status', 'available')->count() }}</p>
+                        <div class="flex-1">
+                            <p class="text-sm font-medium text-gray-600">Total Rooms</p>
+                            <p class="text-xs text-gray-500 mt-1">All rooms in the hotel</p>
                         </div>
-                        <div class="p-2 bg-green-100 rounded-lg">
-                            <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                            </svg>
+                        <div class="flex items-center space-x-2">
+                            <p class="text-2xl font-bold text-blue-600">{{ $rooms->count() }}</p>
+                            <div class="p-3 bg-blue-100 rounded-lg border border-blue-200">
+                                <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
+                                </svg>
+                            </div>
                         </div>
                     </div>
                 </div>
-                
             </div>
 
             <!-- Room Cards -->
@@ -175,8 +201,14 @@
                 <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
                 </svg>
-                <h3 class="mt-2 text-sm font-medium text-gray-900">No rooms</h3>
-                <p class="mt-1 text-sm text-gray-500">Get started by creating a new room.</p>
+                <h3 class="mt-2 text-sm font-medium text-gray-900">No rooms found</h3>
+                <p class="mt-1 text-sm text-gray-500">
+                    @if(!empty($search))
+                        No rooms match "{{ $search }}"
+                    @else
+                        Get started by creating a new room.
+                    @endif
+                </p>
                 <div class="mt-6">
                     <button id="addRoomEmptyBtn" class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
                         <svg class="-ml-1 mr-2 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -202,16 +234,30 @@ document.addEventListener('DOMContentLoaded', function() {
     const cancelDeleteBtn = document.getElementById('cancelDeleteBtn');
     const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
     const form = document.getElementById('roomForm');
+    const deleteForm = document.getElementById('deleteForm');
     const modalTitle = document.getElementById('modalTitle');
     const submitBtn = document.getElementById('submitBtn');
     const imageInput = document.getElementById('roomImageInput');
     const imagePreview = document.getElementById('roomImagePreview');
     const searchInput = document.getElementById('searchInput');
-    const statusFilter = document.getElementById('statusFilter');
-    const roomsGrid = document.getElementById('roomsGrid');
-    const roomCards = document.querySelectorAll('.room-card');
+    const searchForm = document.getElementById('searchForm');
 
     let currentRoomId = null;
+    let searchTimeout;
+
+    // Auto-search with debounce (500ms delay)
+    searchInput.addEventListener('input', function() {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => {
+            searchForm.submit();
+        }, 500);
+    });
+
+    // Clear search button
+    window.clearSearch = function() {
+        searchInput.value = '';
+        searchForm.submit();
+    }
 
     // Open Add Room Modal
     [addRoomBtn, addRoomEmptyBtn].forEach(btn => {
@@ -260,7 +306,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // Edit Room - Fixed version
+    // Edit Room
     document.addEventListener('click', function(e) {
         if (e.target.closest('.edit-room')) {
             const editBtn = e.target.closest('.edit-room');
@@ -312,22 +358,10 @@ document.addEventListener('DOMContentLoaded', function() {
         if (e.target.closest('.delete-room')) {
             const deleteBtn = e.target.closest('.delete-room');
             currentRoomId = deleteBtn.dataset.roomId;
+            
+            // Set the delete form action
+            deleteForm.action = `/rooms/${currentRoomId}`;
             deleteModal.classList.remove('hidden');
-        }
-    });
-
-    // Confirm Delete
-    confirmDeleteBtn.addEventListener('click', function() {
-        if (currentRoomId) {
-            const form = document.createElement('form');
-            form.method = 'POST';
-            form.action = `/rooms/${currentRoomId}`;
-            form.innerHTML = `
-                @csrf
-                @method('DELETE')
-            `;
-            document.body.appendChild(form);
-            form.submit();
         }
     });
 
@@ -336,29 +370,6 @@ document.addEventListener('DOMContentLoaded', function() {
         deleteModal.classList.add('hidden');
         currentRoomId = null;
     });
-
-    // Search and Filter
-    function filterRooms() {
-        const searchTerm = searchInput.value.toLowerCase();
-        const statusValue = statusFilter.value;
-        
-        roomCards.forEach(card => {
-            const roomNumber = card.querySelector('h3').textContent.toLowerCase();
-            const status = card.dataset.status;
-            
-            const matchesSearch = roomNumber.includes(searchTerm);
-            const matchesStatus = !statusValue || status === statusValue;
-            
-            if (matchesSearch && matchesStatus) {
-                card.style.display = 'block';
-            } else {
-                card.style.display = 'none';
-            }
-        });
-    }
-
-    searchInput.addEventListener('input', filterRooms);
-    statusFilter.addEventListener('change', filterRooms);
 
     // Reset form function
     function resetForm() {

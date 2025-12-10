@@ -1,6 +1,4 @@
 <?php
-// app/Http/Controllers/UsersController.php
-
 namespace App\Http\Controllers;
 
 use App\Models\User;
@@ -10,10 +8,22 @@ use Illuminate\Validation\Rule;
 
 class UsersController extends Controller
 {
-    public function index()
+    public function index(Request $request) // Add Request parameter
     {
-        $users = User::orderByDesc('created_at')->get();
-        return view('employee', compact('users'));
+        $search = $request->get('search', ''); // Get search parameter
+        
+        $users = User::when($search, function($query, $search) {
+            return $query->where(function($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                  ->orWhere('email', 'like', "%{$search}%")
+                  ->orWhere('phone', 'like', "%{$search}%")
+                  ->orWhere('role', 'like', "%{$search}%");
+            });
+        })
+        ->orderByDesc('created_at')
+        ->get();
+        
+        return view('employee', compact('users', 'search')); // Pass search to view
     }
 
     public function store(Request $request)
@@ -37,7 +47,7 @@ class UsersController extends Controller
             'is_active' => $request->boolean('is_active', true),
         ]);
 
-        return redirect()->route('users.index')->with('success', 'User created successfully. They can now log in with their email and password.');
+        return redirect()->route('users.index', ['search' => $request->get('search')])->with('success', 'User created successfully. They can now log in with their email and password.');
     }
 
     public function update(Request $request, User $user)
@@ -67,20 +77,20 @@ class UsersController extends Controller
 
         $user->update($updateData);
 
-        return redirect()->route('users.index')->with('success', 'User updated successfully.');
+        return redirect()->route('users.index', ['search' => $request->get('search')])->with('success', 'User updated successfully.');
     }
 
-    public function destroy(User $user)
+    public function destroy(User $user, Request $request)
     {
         // Prevent deleting your own account
         if ($user->id === auth()->id()) {
-            return redirect()->route('users.index')->with('error', 'You cannot delete your own account.');
+            return redirect()->route('users.index', ['search' => $request->get('search')])->with('error', 'You cannot delete your own account.');
         }
 
         // Delete the user
         $userName = $user->name;
         $user->delete();
 
-        return redirect()->route('users.index')->with('success', "User \"{$userName}\" has been deleted successfully.");
+        return redirect()->route('users.index', ['search' => $request->get('search')])->with('success', "User \"{$userName}\" has been deleted successfully.");
     }
 }

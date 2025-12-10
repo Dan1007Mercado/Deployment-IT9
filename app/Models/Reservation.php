@@ -47,6 +47,12 @@ class Reservation extends Model
         return $this->hasMany(Booking::class, 'reservation_id');
     }
 
+    // Relationship to Payments through Bookings - ADD THIS
+    public function payments()
+    {
+        return $this->hasManyThrough(Payment::class, Booking::class, 'reservation_id', 'booking_id');
+    }
+
     // Get all rooms across all bookings for this reservation
     public function getAllRoomsAttribute()
     {

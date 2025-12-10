@@ -16,7 +16,8 @@ class TransactionController extends Controller
         // Get filter parameters
         $status = $request->get('status');
         $method = $request->get('method');
-        $search = $request->get('search');
+        $search = $request->get('search', '');
+        $per_page = $request->get('per_page', 10);
         
         // Base query with relationships
         $query = Payment::with([
@@ -50,7 +51,7 @@ class TransactionController extends Controller
         
         // Get paginated results
         $transactions = $query->orderBy('payment_date', 'desc')
-                            ->paginate(10)
+                            ->paginate($per_page)
                             ->appends($request->query());
         
         // Calculate summary statistics
@@ -95,7 +96,8 @@ class TransactionController extends Controller
             'todayRevenue',
             'todayCount',
             'failedAmount',
-            'failedCount'
+            'failedCount',
+            'search'
         ));
     }
 }

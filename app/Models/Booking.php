@@ -37,6 +37,12 @@ class Booking extends Model
         return $this->hasMany(BookingRoom::class, 'booking_id');
     }
 
+    // Relationship to Payments - ADD THIS
+    public function payments()
+    {
+        return $this->hasMany(Payment::class, 'booking_id');
+    }
+
     // Helper method to get room numbers
     public function getRoomNumbersAttribute()
     {

@@ -9,25 +9,27 @@ use App\Models\Reservation;
 use App\Models\Booking;
 use App\Models\BookingRoom;
 use App\Models\Payment;
+use App\Services\StripePaymentService;
 use App\Services\GmailService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
-use Stripe\Stripe;
-use Stripe\Checkout\Session;
+use Illuminate\Support\Facades\Log;
 
 class GuestBookingController extends Controller
 {
     protected $gmailService;
+    protected $stripeService;
 
     public function __construct()
     {
         $this->gmailService = new GmailService();
+        $this->stripeService = new StripePaymentService();
     }
 
     public function home()
     {
-        \Log::info('Loading home page with room types');
+        Log::info('Loading home page with room types');
         
         $roomTypes = RoomType::with(['rooms' => function($query) {
             $query->where('room_status', 'available')->limit(5);
@@ -37,21 +39,21 @@ class GuestBookingController extends Controller
         }])
         ->get();
         
-        \Log::info('Found ' . $roomTypes->count() . ' room types');
+        Log::info('Found ' . $roomTypes->count() . ' room types');
         
         return view('home', compact('roomTypes'));
     }
 
     public function index()
     {
-        \Log::info('Hotel index page accessed');
+        Log::info('Hotel index page accessed');
         return $this->home();
     }
 
     public function checkAvailability(Request $request)
     {
         try {
-            \Log::info('Guest check availability request started', $request->all());
+            Log::info('Guest check availability request started', $request->all());
             
             $request->validate([
                 'check_in_date' => 'required|date|after_or_equal:today',
@@ -60,28 +62,29 @@ class GuestBookingController extends Controller
                 'num_rooms' => 'required|integer|min:1'
             ]);
 
-            \Log::info('Validation passed for availability check');
+            Log::info('Validation passed for availability check');
             
+            // FIXED: Better availability check that looks for date conflicts
             $availableRooms = Room::where('room_type_id', $request->room_type_id)
                 ->where('room_status', 'available')
                 ->whereDoesntHave('bookings', function($query) use ($request) {
-                    \Log::info('Executing whereDoesntHave query');
                     $query->whereHas('booking.reservation', function($q) use ($request) {
+                        // Check for overlapping dates with confirmed reservations
                         $q->where(function($q2) use ($request) {
+                            // Date range overlaps: (StartA < EndB) AND (EndA > StartB)
                             $q2->where('check_in_date', '<', $request->check_out_date)
                                ->where('check_out_date', '>', $request->check_in_date);
                         })
                         ->whereIn('status', ['confirmed', 'checked_in', 'reserved']);
                     });
                 })
-                ->limit($request->num_rooms)
-                ->get();
+                ->get(); // Removed limit to get all available rooms
 
-            \Log::info('Found ' . $availableRooms->count() . ' available rooms out of ' . $request->num_rooms . ' needed');
+            Log::info('Found ' . $availableRooms->count() . ' available rooms out of ' . $request->num_rooms . ' needed');
 
             $roomType = RoomType::find($request->room_type_id);
             if (!$roomType) {
-                \Log::error('Room type not found: ' . $request->room_type_id);
+                Log::error('Room type not found: ' . $request->room_type_id);
                 return response()->json([
                     'success' => false,
                     'message' => 'Room type not found'
@@ -92,8 +95,8 @@ class GuestBookingController extends Controller
             $checkOut = Carbon::parse($request->check_out_date);
             $nights = $checkIn->diffInDays($checkOut);
             
-            \Log::info('Check-in: ' . $checkIn . ', Check-out: ' . $checkOut . ', Nights: ' . $nights);
-            \Log::info('Room price: ' . $roomType->base_price . ', Total amount: ' . ($roomType->base_price * $nights * $request->num_rooms));
+            Log::info('Check-in: ' . $checkIn . ', Check-out: ' . $checkOut . ', Nights: ' . $nights);
+            Log::info('Room price: ' . $roomType->base_price . ', Total amount: ' . ($roomType->base_price * $nights * $request->num_rooms));
 
             return response()->json([
                 'success' => true,
@@ -113,7 +116,7 @@ class GuestBookingController extends Controller
             ]);
 
         } catch (\Exception $e) {
-            \Log::error('Check availability error:', [
+            Log::error('Check availability error:', [
                 'message' => $e->getMessage(),
                 'file' => $e->getFile(),
                 'line' => $e->getLine(),
@@ -129,7 +132,7 @@ class GuestBookingController extends Controller
 
     public function roomDetails($roomTypeId)
     {
-        \Log::info('Loading room details for room type: ' . $roomTypeId);
+        Log::info('Loading room details for room type: ' . $roomTypeId);
         
         $roomType = RoomType::with(['rooms' => function($query) {
             $query->where('room_status', 'available');
@@ -144,7 +147,7 @@ class GuestBookingController extends Controller
             ->limit(3)
             ->get();
 
-        \Log::info('Found room type: ' . $roomType->type_name . ' with ' . $roomType->rooms_count . ' available rooms');
+        Log::info('Found room type: ' . $roomType->type_name . ' with ' . $roomType->rooms_count . ' available rooms');
         
         return view('guest.room-details', compact('roomType', 'similarRooms'));
     }
@@ -152,7 +155,7 @@ class GuestBookingController extends Controller
     public function prepareBooking(Request $request)
     {
         try {
-            \Log::info('Prepare booking request started', $request->all());
+            Log::info('Prepare booking request started', $request->all());
             
             $request->validate([
                 'room_type_id' => 'required|exists:room_types,room_type_id',
@@ -162,7 +165,7 @@ class GuestBookingController extends Controller
                 'num_guests' => 'required|integer|min:1|max:20'
             ]);
 
-            \Log::info('Validation passed for prepare booking');
+            Log::info('Validation passed for prepare booking');
             
             $roomType = RoomType::findOrFail($request->room_type_id);
             $checkIn = Carbon::parse($request->check_in_date);
@@ -170,13 +173,15 @@ class GuestBookingController extends Controller
             $nights = $checkIn->diffInDays($checkOut);
             $totalAmount = $roomType->base_price * $nights * $request->num_rooms;
             
-            \Log::info('Room type: ' . $roomType->room_type_name . ', Nights: ' . $nights . ', Total: ' . $totalAmount);
+            Log::info('Room type: ' . $roomType->room_type_name . ', Nights: ' . $nights . ', Total: ' . $totalAmount);
 
+            // FIXED: Check availability with proper date conflict logic
             $availableRooms = Room::where('room_type_id', $request->room_type_id)
                 ->where('room_status', 'available')
                 ->whereDoesntHave('bookings', function($query) use ($request) {
                     $query->whereHas('booking.reservation', function($q) use ($request) {
                         $q->where(function($q2) use ($request) {
+                            // Date range overlaps: (StartA < EndB) AND (EndA > StartB)
                             $q2->where('check_in_date', '<', $request->check_out_date)
                                ->where('check_out_date', '>', $request->check_in_date);
                         })
@@ -186,10 +191,10 @@ class GuestBookingController extends Controller
                 ->limit($request->num_rooms)
                 ->get();
 
-            \Log::info('Available rooms count for booking: ' . $availableRooms->count() . ', Needed: ' . $request->num_rooms);
+            Log::info('Available rooms count for booking: ' . $availableRooms->count() . ', Needed: ' . $request->num_rooms);
 
             if ($availableRooms->count() < $request->num_rooms) {
-                \Log::warning('Insufficient available rooms for booking');
+                Log::warning('Insufficient available rooms for booking');
                 return response()->json([
                     'success' => false,
                     'message' => 'Sorry, the selected rooms are no longer available. Please try different dates or room type.'
@@ -197,7 +202,7 @@ class GuestBookingController extends Controller
             }
 
             $tempReference = 'TEMP-' . strtoupper(uniqid());
-            \Log::info('Generated temp reference: ' . $tempReference);
+            Log::info('Generated temp reference: ' . $tempReference);
 
             session([
                 'temp_booking' => [
@@ -216,7 +221,7 @@ class GuestBookingController extends Controller
                 ]
             ]);
 
-            \Log::info('Temp booking stored in session, expires at: ' . Carbon::now()->addMinutes(30));
+            Log::info('Temp booking stored in session, expires at: ' . Carbon::now()->addMinutes(30));
 
             return response()->json([
                 'success' => true,
@@ -236,7 +241,7 @@ class GuestBookingController extends Controller
             ]);
 
         } catch (\Exception $e) {
-            \Log::error('Prepare booking error:', [
+            Log::error('Prepare booking error:', [
                 'message' => $e->getMessage(),
                 'file' => $e->getFile(),
                 'line' => $e->getLine(),
@@ -253,7 +258,7 @@ class GuestBookingController extends Controller
     public function confirmBooking(Request $request)
     {
         try {
-            \Log::info('Confirm booking request started', $request->except(['first_name', 'last_name', 'email', 'contact_number']));
+            Log::info('Confirm booking request started', $request->except(['first_name', 'last_name', 'email', 'contact_number']));
             
             $request->validate([
                 'first_name' => 'required|string|max:100',
@@ -261,18 +266,17 @@ class GuestBookingController extends Controller
                 'email' => 'required|email|max:150',
                 'contact_number' => 'required|string|max:20',
                 'special_requests' => 'nullable|string|max:500',
-                'payment_method' => 'required|in:online,credit_card',
                 'temp_reference' => 'required|string'
             ]);
 
-            \Log::info('Validation passed for confirm booking');
+            Log::info('Validation passed for confirm booking');
 
             $tempBooking = session('temp_booking');
             
-            \Log::info('Temp booking from session:', $tempBooking ?? ['no_temp_booking' => true]);
+            Log::info('Temp booking from session:', $tempBooking ?? ['no_temp_booking' => true]);
             
             if (!$tempBooking || $tempBooking['reference'] !== $request->temp_reference) {
-                \Log::warning('Invalid temp booking reference or no session');
+                Log::warning('Invalid temp booking reference or no session');
                 return response()->json([
                     'success' => false,
                     'message' => 'Booking session expired or invalid. Please start over.'
@@ -280,7 +284,7 @@ class GuestBookingController extends Controller
             }
 
             if (Carbon::parse($tempBooking['expires_at'])->isPast()) {
-                \Log::warning('Temp booking expired');
+                Log::warning('Temp booking expired');
                 session()->forget('temp_booking');
                 return response()->json([
                     'success' => false,
@@ -288,14 +292,39 @@ class GuestBookingController extends Controller
                 ], 400);
             }
 
-            \Log::info('Starting database transaction for booking confirmation');
+            // FIXED: Double-check room availability before confirming
+            $availableRooms = Room::where('room_type_id', $tempBooking['room_type_id'])
+                ->where('room_status', 'available')
+                ->whereDoesntHave('bookings', function($query) use ($tempBooking) {
+                    $query->whereHas('booking.reservation', function($q) use ($tempBooking) {
+                        $q->where(function($q2) use ($tempBooking) {
+                            $q2->where('check_in_date', '<', $tempBooking['check_out_date'])
+                               ->where('check_out_date', '>', $tempBooking['check_in_date']);
+                        })
+                        ->whereIn('status', ['confirmed', 'checked_in', 'reserved']);
+                    });
+                })
+                ->whereIn('room_id', $tempBooking['available_room_ids'])
+                ->limit($tempBooking['num_rooms'])
+                ->get();
+
+            if ($availableRooms->count() < $tempBooking['num_rooms']) {
+                Log::warning('Rooms no longer available at confirmation stage');
+                session()->forget('temp_booking');
+                return response()->json([
+                    'success' => false,
+                    'message' => 'The selected rooms are no longer available. Please try again.'
+                ], 400);
+            }
+
+            Log::info('Starting database transaction for booking confirmation');
             DB::beginTransaction();
             
             try {
                 $guest = Guest::where('email', $request->email)->first();
                 
                 if (!$guest) {
-                    \Log::info('Creating new guest');
+                    Log::info('Creating new guest');
                     $guest = Guest::create([
                         'first_name' => $request->first_name,
                         'last_name' => $request->last_name,
@@ -303,9 +332,9 @@ class GuestBookingController extends Controller
                         'contact_number' => $request->contact_number,
                         'guest_type' => 'advance'   
                     ]);
-                    \Log::info('Guest created with ID: ' . $guest->guest_id);
+                    Log::info('Guest created with ID: ' . $guest->guest_id);
                 } else {
-                    \Log::info('Updating existing guest ID: ' . $guest->guest_id);
+                    Log::info('Updating existing guest ID: ' . $guest->guest_id);
                     $guest->update([
                         'first_name' => $request->first_name,
                         'last_name' => $request->last_name,
@@ -313,7 +342,7 @@ class GuestBookingController extends Controller
                     ]);
                 }
 
-                \Log::info('Creating reservation for guest ID: ' . $guest->guest_id);
+                Log::info('Creating reservation for guest ID: ' . $guest->guest_id);
                 $reservation = Reservation::create([
                     'guest_id' => $guest->guest_id,
                     'room_type_id' => $tempBooking['room_type_id'],
@@ -321,28 +350,28 @@ class GuestBookingController extends Controller
                     'check_out_date' => $tempBooking['check_out_date'],
                     'num_guests' => $tempBooking['num_guests'],
                     'total_amount' => $tempBooking['total_amount'],
-                    'status' => 'Completed',
+                    'status' => 'pending', // Online payment is always pending until paid
                     'reservation_type' => 'advance',
                     'booking_source' => 'online',
                     'special_requests' => $request->special_requests,
                     'expires_at' => Carbon::now()->addHours(24)
                 ]);
 
-                \Log::info('Reservation created with ID: ' . $reservation->reservation_id);
+                Log::info('Reservation created with ID: ' . $reservation->reservation_id);
 
-                \Log::info('Creating booking for reservation ID: ' . $reservation->reservation_id);
+                Log::info('Creating booking for reservation ID: ' . $reservation->reservation_id);
                 $booking = Booking::create([
                     'reservation_id' => $reservation->reservation_id,
-                    'booking_status' => $request->payment_method === 'credit_card' ? 'reserved' : 'completed',
+                    'booking_status' => 'pending', // Always pending for online payment
                     'booking_date' => now()
                 ]);
 
-                \Log::info('Booking created with ID: ' . $booking->booking_id);
+                Log::info('Booking created with ID: ' . $booking->booking_id);
 
-                $rooms = Room::whereIn('room_id', array_slice($tempBooking['available_room_ids'], 0, $tempBooking['num_rooms']))
-                    ->get();
+                // FIXED: Use the freshly checked available rooms
+                $rooms = $availableRooms;
                 
-                \Log::info('Assigning ' . $rooms->count() . ' rooms to booking');
+                Log::info('Assigning ' . $rooms->count() . ' rooms to booking');
                 
                 foreach ($rooms as $room) {
                     BookingRoom::create([
@@ -351,98 +380,41 @@ class GuestBookingController extends Controller
                         'room_price' => $tempBooking['room_price']
                     ]);
                     
-                    \Log::info('Room ' . $room->room_number . ' assigned to booking, updating status to reserved');
+                    Log::info('Room ' . $room->room_number . ' assigned to booking (status remains available until payment)');
                     
-                    $room->update(['room_status' => 'occupied']);
+                    // IMPORTANT: Do NOT update room status yet - only when payment is confirmed
+                    // Room remains available for other bookings until payment completes
                 }
 
                 $transactionId = 'BOOK-' . strtoupper(uniqid());
-                \Log::info('Generated transaction ID: ' . $transactionId);
+                Log::info('Generated transaction ID: ' . $transactionId);
 
+                // Create payment with pending status (will be updated when Stripe payment completes)
                 $payment = Payment::create([
                     'booking_id' => $booking->booking_id,
                     'amount' => $tempBooking['total_amount'],
-                    'payment_method' => $request->payment_method,
-                    'payment_status' => $request->payment_method === 'credit_card' ? 'completed' : 'completed',
+                    'payment_method' => 'online', // Always online now
+                    'payment_status' => 'pending', // Always pending for online payment
                     'transaction_id' => $transactionId,
-                    'payment_date' => $request->payment_method === 'credit_card' ? null : now(),
-                    'notes' => $request->payment_method === 'credit_card' 
+                    'payment_date' => null, // Will be set when payment completes
+                    'notes' => 'Online booking payment (pending)'
                 ]);
 
-                \Log::info('Payment created with ID: ' . $payment->payment_id . ', Status: ' . $payment->payment_status);
-
-                $reservation->update([
-                    'status' => $request->payment_method === 'credit_card' ? 'confirmed' : 'confirmed'
-                ]);
-
-                \Log::info('Reservation status updated to: ' . $reservation->status);
+                Log::info('Payment created with ID: ' . $payment->payment_id . ', Status: pending (online payment)');
 
                 DB::commit();
-                DB::commit();
-\Log::info('Database transaction committed successfully');
-
-// DEBUG: Check email service
-\Log::info('DEBUG: GmailService authenticated: ' . ($this->gmailService->isAuthenticated() ? 'YES' : 'NO'));
-\Log::info('DEBUG: Guest email: ' . $reservation->guest->email);
-
-// SEND EMAILS HERE - AFTER DB COMMIT
-try {
-    $reservation->refresh()->load(['guest', 'roomType', 'bookings.rooms.room', 'payments']);
-    
-    \Log::info('DEBUG: Starting to send email...');
-    
-    if ($request->payment_method === 'online') {
-        $emailSent = $this->gmailService->sendOnlineBookingConfirmation($reservation, $reservation->guest, $payment);
-        \Log::info('DEBUG: Online payment email sent: ' . ($emailSent ? 'YES' : 'NO'));
-    } elseif ($request->payment_method === 'credit_card') {
-        $emailSent = $this->gmailService->sendCreditCardBookingConfirmation($reservation, $reservation->guest, $payment);
-        \Log::info('DEBUG: Credit Card email sent: ' . ($emailSent ? 'YES' : 'NO'));
-    }
-    
-    if (!$emailSent) {
-        \Log::error('DEBUG: EMAIL FAILED - Check GmailService logs');
-    }
-} catch (\Exception $e) {
-    \Log::error('DEBUG: Email exception: ' . $e->getMessage());
-}
-                \Log::info('Database transaction committed successfully');
-
-                // SEND EMAILS HERE - AFTER DB COMMIT
-                try {
-                    $reservation->refresh()->load(['guest', 'roomType', 'bookings.rooms.room']);
-                    
-                    if ($request->payment_method === 'online') {
-                        $emailSent = $this->gmailService->sendOnlineBookingConfirmation($reservation, $reservation->guest, $payment);
-                        \Log::info('Online payment confirmation email sent: ' . ($emailSent ? 'YES' : 'NO'));
-                    } elseif ($request->payment_method === 'credit_card') {
-                        $emailSent = $this->gmailService->sendCreditCardBookingConfirmation($reservation, $reservation->guest, $payment);
-                        \Log::info('Credit Card booking confirmation email sent: ' . ($emailSent ? 'YES' : 'NO'));
-                    }
-                } catch (\Exception $e) {
-                    \Log::error('Failed to send email: ' . $e->getMessage());
-                }
+                Log::info('Database transaction committed successfully');
 
                 session()->forget('temp_booking');
-                \Log::info('Temp booking cleared from session');
+                Log::info('Temp booking cleared from session');
 
-                if ($request->payment_method === 'online') {
-                    \Log::info('Creating Stripe session for online payment');
-                    return $this->createStripeSession($payment, $reservation);
-                }
-
-                \Log::info('Credit Card payment booking completed successfully');
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Booking confirmed!',
-                    'booking_reference' => $transactionId,
-                    'reservation_id' => $reservation->reservation_id,
-                    'payment_method' => 'credit_card',
-                    'redirect_url' => route('guest.booking.success', ['reservation' => $reservation->reservation_id])
-                ]);
+                // Process online payment with Stripe
+                Log::info('Creating Stripe session for online payment');
+                return $this->processOnlinePayment($reservation, $payment);
 
             } catch (\Exception $e) {
                 DB::rollBack();
-                \Log::error('Booking creation error in transaction:', [
+                Log::error('Booking creation error in transaction:', [
                     'message' => $e->getMessage(),
                     'file' => $e->getFile(),
                     'line' => $e->getLine(),
@@ -456,7 +428,7 @@ try {
             }
 
         } catch (\Exception $e) {
-            \Log::error('Confirm booking outer error:', [
+            Log::error('Confirm booking outer error:', [
                 'message' => $e->getMessage(),
                 'file' => $e->getFile(),
                 'line' => $e->getLine()
@@ -469,44 +441,39 @@ try {
         }
     }
 
-    public function processOnlinePayment(Request $request)
+    public function processOnlinePayment($reservation, $payment)
     {
         try {
-            \Log::info('Process online payment request', $request->all());
+            Log::info('Processing online payment for reservation: ' . $reservation->reservation_id);
             
-            $request->validate([
-                'reservation_id' => 'required|exists:reservations,reservation_id',
-                'payment_method' => 'required|in:stripe,paypal,gcash'
-            ]);
-
-            \Log::info('Processing online payment for reservation: ' . $request->reservation_id);
-
-            $reservation = Reservation::with(['payments', 'guest'])->findOrFail($request->reservation_id);
+            // Use StripePaymentService
+            $stripeResult = $this->stripeService->createPaymentSession($reservation);
             
-            $existingPayment = $reservation->payments()->where('payment_method', 'online')->first();
-            
-            if ($existingPayment) {
-                \Log::info('Using existing payment ID: ' . $existingPayment->payment_id);
-                return $this->createStripeSession($existingPayment, $reservation);
+            if (!$stripeResult['success']) {
+                throw new \Exception($stripeResult['error']);
             }
 
-            $transactionId = 'BOOK-' . strtoupper(uniqid());
-            \Log::info('Creating new payment with transaction ID: ' . $transactionId);
-            
-            $payment = Payment::create([
-                'booking_id' => $reservation->bookings()->first()->booking_id,
-                'amount' => $reservation->total_amount,
-                'payment_method' => 'online',
-                'payment_status' => 'completed',
-                'transaction_id' => $transactionId,
-                'payment_date' => null
+            // Update payment with Stripe session info
+            $payment->update([
+                'transaction_id' => $stripeResult['session_id'],
+                'stripe_payment_url' => $stripeResult['payment_url'],
+                'payment_status' => 'pending'
             ]);
 
-            \Log::info('New payment created with ID: ' . $payment->payment_id);
-            return $this->createStripeSession($payment, $reservation);
+            Log::info('Stripe session created: ' . $stripeResult['session_id']);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Online payment session created.',
+                'payment_url' => $stripeResult['payment_url'],
+                'session_id' => $stripeResult['session_id'],
+                'payment_id' => $payment->payment_id,
+                'reservation_id' => $reservation->reservation_id,
+                'redirect_url' => $stripeResult['payment_url'] // This is the Stripe checkout URL
+            ]);
 
         } catch (\Exception $e) {
-            \Log::error('Process online payment error:', [
+            Log::error('Process online payment error:', [
                 'message' => $e->getMessage(),
                 'file' => $e->getFile(),
                 'line' => $e->getLine()
@@ -519,126 +486,82 @@ try {
         }
     }
 
-    private function createStripeSession($payment, $reservation)
-    {
-        try {
-            \Log::info('Creating Stripe session for payment ID: ' . $payment->payment_id);
-            
-            Stripe::setApiKey(env('STRIPE_SECRET'));
-
-            $checkout_session = Session::create([
-                'payment_method_types' => ['card'],
-                'line_items' => [[
-                    'price_data' => [
-                        'currency' => 'php',
-                        'product_data' => [
-                            'name' => 'Hotel Booking - ' . $reservation->roomType->room_type_name,
-                            'description' => 'Check-in: ' . $reservation->check_in_date . 
-                                           ' | Check-out: ' . $reservation->check_out_date .
-                                           ' | Guests: ' . $reservation->num_guests,
-                        ],
-                        'unit_amount' => $payment->amount * 100,
-                    ],
-                    'quantity' => 1,
-                ]],
-                'mode' => 'payment',
-                'success_url' => route('guest.booking.success', ['reservation' => $reservation->reservation_id]) . '?session_id={CHECKOUT_SESSION_ID}',
-                'cancel_url' => route('guest.booking.cancel', ['reservation' => $reservation->reservation_id]),
-                'metadata' => [
-                    'reservation_id' => $reservation->reservation_id,
-                    'payment_id' => $payment->payment_id,
-                    'transaction_id' => $payment->transaction_id
-                ],
-                'customer_email' => $reservation->guest->email,
-            ]);
-
-            \Log::info('Stripe session created with ID: ' . $checkout_session->id);
-
-            $payment->update([
-                'stripe_session_id' => $checkout_session->id,
-                'stripe_payment_intent_id' => $checkout_session->payment_intent
-            ]);
-
-            \Log::info('Payment updated with Stripe session ID');
-
-            return response()->json([
-                'success' => true,
-                'session_id' => $checkout_session->id,
-                'redirect_url' => $checkout_session->url
-            ]);
-
-        } catch (\Exception $e) {
-            \Log::error('Stripe session creation error:', [
-                'message' => $e->getMessage(),
-                'file' => $e->getFile(),
-                'line' => $e->getLine(),
-                'stripe_key_exists' => !empty(env('STRIPE_SECRET'))
-            ]);
-            
-            return response()->json([
-                'success' => false,
-                'message' => 'Error creating payment session: ' . $e->getMessage()
-            ], 500);
-        }
-    }
-
     public function bookingSuccess($reservationId)
     {
         try {
-            \Log::info('Loading booking success page for reservation: ' . $reservationId);
+            Log::info('Loading booking success page for reservation: ' . $reservationId);
             
             $reservation = Reservation::with(['guest', 'roomType', 'payments', 'bookings.rooms.room'])
                 ->findOrFail($reservationId);
 
-            \Log::info('Reservation loaded, status: ' . $reservation->status);
+            Log::info('Reservation loaded, status: ' . $reservation->status);
 
             $sessionId = request()->query('session_id');
             if ($sessionId) {
-                \Log::info('Processing Stripe callback with session ID: ' . $sessionId);
+                Log::info('Processing Stripe callback with session ID: ' . $sessionId);
                 
                 try {
-                    Stripe::setApiKey(env('STRIPE_SECRET'));
-                    $session = Session::retrieve($sessionId);
+                    // Check payment status via Stripe service
+                    $paymentStatus = $this->stripeService->checkPaymentStatus($sessionId);
                     
-                    \Log::info('Stripe session retrieved, payment status: ' . $session->payment_status);
+                    Log::info('Stripe payment status: ' . $paymentStatus);
                     
-                    if ($session->payment_status === 'paid') {
-                        $payment = $reservation->payments()->where('stripe_session_id', $sessionId)->first();
-                        if ($payment) {
-                            \Log::info('Updating payment ID: ' . $payment->payment_id . ' to completed');
+                    if ($paymentStatus === 'paid') {
+                        $payment = $reservation->payments()->where('transaction_id', $sessionId)->first();
+                        if ($payment && $payment->payment_status === 'pending') {
+                            Log::info('Updating payment ID: ' . $payment->payment_id . ' to completed');
+                            
+                            DB::beginTransaction();
                             
                             $payment->update([
                                 'payment_status' => 'completed',
                                 'payment_date' => now(),
-                                'stripe_payment_intent_id' => $session->payment_intent
+                                'stripe_payment_intent_id' => $sessionId
                             ]);
                             
                             $reservation->update(['status' => 'confirmed']);
-                            \Log::info('Reservation status updated to confirmed');
+                            Log::info('Reservation status updated to confirmed');
                             
                             if ($reservation->bookings()->exists()) {
-                                $reservation->bookings()->update(['booking_status' => 'confirmed']);
-                                \Log::info('Booking status updated to confirmed');
+                                $reservation->bookings()->update(['booking_status' => 'reserved']);
+                                Log::info('Booking status updated to reserved');
+                                
+                                // Update room status to occupied only now that payment is complete
+                                foreach ($reservation->bookings as $booking) {
+                                    foreach ($booking->rooms as $bookingRoom) {
+                                        $room = $bookingRoom->room;
+                                        $room->update(['room_status' => 'occupied']);
+                                        Log::info('Room ' . $room->room_number . ' status updated to occupied');
+                                    }
+                                }
                             }
                             
+                            // Send payment confirmation email
                             try {
                                 $reservation->refresh()->load(['guest', 'roomType', 'bookings.rooms.room', 'payments']);
                                 $emailSent = $this->gmailService->sendOnlineBookingConfirmation($reservation, $reservation->guest, $payment);
-                                \Log::info('Payment completion email sent: ' . ($emailSent ? 'YES' : 'NO'));
+                                Log::info('Payment completion email sent: ' . ($emailSent ? 'YES' : 'NO'));
                             } catch (\Exception $e) {
-                                \Log::error('Failed to send payment completion email: ' . $e->getMessage());
+                                Log::error('Failed to send payment completion email: ' . $e->getMessage());
                             }
+                            
+                            DB::commit();
                         }
+                    } else if ($paymentStatus === 'unpaid') {
+                        Log::info('Payment is still unpaid, showing pending status');
+                        // Payment is still pending - don't update anything
+                    } else {
+                        Log::warning('Payment status is: ' . $paymentStatus . ' for session: ' . $sessionId);
                     }
                 } catch (\Exception $e) {
-                    \Log::error('Stripe session retrieval error: ' . $e->getMessage());
+                    Log::error('Stripe session retrieval error: ' . $e->getMessage());
                 }
             }
 
             return view('guest.booking-success', compact('reservation'));
 
         } catch (\Exception $e) {
-            \Log::error('Booking success page error:', [
+            Log::error('Booking success page error:', [
                 'message' => $e->getMessage(),
                 'file' => $e->getFile(),
                 'line' => $e->getLine()
@@ -651,15 +574,15 @@ try {
     public function bookingCancel($reservationId)
     {
         try {
-            \Log::info('Loading booking cancel page for reservation: ' . $reservationId);
+            Log::info('Loading booking cancel page for reservation: ' . $reservationId);
             
             $reservation = Reservation::with(['guest', 'roomType'])
                 ->findOrFail($reservationId);
 
-            \Log::info('Reservation current status: ' . $reservation->status);
+            Log::info('Reservation current status: ' . $reservation->status);
 
             if (in_array($reservation->status, ['pending', 'reserved'])) {
-                \Log::info('Cancelling reservation and releasing rooms');
+                Log::info('Cancelling reservation and releasing rooms');
                 
                 $reservation->update(['status' => 'cancelled']);
                 
@@ -667,17 +590,17 @@ try {
                     foreach ($booking->rooms as $bookingRoom) {
                         $room = $bookingRoom->room;
                         $room->update(['room_status' => 'available']);
-                        \Log::info('Room ' . $room->room_number . ' released to available');
+                        Log::info('Room ' . $room->room_number . ' released to available');
                     }
                 }
                 
-                \Log::info('Reservation cancelled successfully');
+                Log::info('Reservation cancelled successfully');
             }
 
             return view('guest.booking-cancel', compact('reservation'));
 
         } catch (\Exception $e) {
-            \Log::error('Booking cancel page error:', [
+            Log::error('Booking cancel page error:', [
                 'message' => $e->getMessage(),
                 'file' => $e->getFile(),
                 'line' => $e->getLine()
@@ -689,9 +612,81 @@ try {
 
     public function processPayment(Request $request)
     {
-        \Log::info('Process payment from modal called');
+        Log::info('Process payment from modal called');
         return $this->confirmBooking($request);
     }
 
-    
+    // Check payment status AJAX endpoint
+    public function checkPaymentStatus(Request $request)
+    {
+        $request->validate([
+            'session_id' => 'required|string',
+            'reservation_id' => 'required|exists:reservations,reservation_id'
+        ]);
+
+        try {
+            $paymentStatus = $this->stripeService->checkPaymentStatus($request->session_id);
+            $reservation = Reservation::find($request->reservation_id);
+            
+            if ($paymentStatus === 'paid') {
+                // Update payment and reservation status
+                $payment = Payment::where('transaction_id', $request->session_id)->first();
+                
+                if ($payment) {
+                    DB::beginTransaction();
+                    
+                    $payment->update([
+                        'payment_status' => 'completed',
+                        'payment_date' => now()
+                    ]);
+
+                    $reservation->update([
+                        'status' => 'confirmed'
+                    ]);
+
+                    foreach ($reservation->bookings as $booking) {
+                        $booking->update([
+                            'booking_status' => 'reserved'
+                        ]);
+                        
+                        // Update room status to occupied
+                        foreach ($booking->rooms as $bookingRoom) {
+                            $room = $bookingRoom->room;
+                            $room->update(['room_status' => 'occupied']);
+                        }
+                    }
+
+                    // Send payment confirmation email
+                    try {
+                        $reservation->refresh()->load(['guest', 'roomType', 'bookings.rooms.room', 'payments']);
+                        $emailSent = $this->gmailService->sendOnlineBookingConfirmation($reservation, $reservation->guest, $payment);
+                    } catch (\Exception $e) {
+                        Log::error('Failed to send payment completion email: ' . $e->getMessage());
+                    }
+
+                    DB::commit();
+
+                    return response()->json([
+                        'success' => true,
+                        'payment_status' => 'paid',
+                        'message' => 'Payment completed successfully!',
+                        'redirect_url' => route('guest.booking.success', ['reservation' => $reservation->reservation_id])
+                    ]);
+                }
+            }
+
+            return response()->json([
+                'success' => true,
+                'payment_status' => $paymentStatus,
+                'message' => $paymentStatus === 'unpaid' ? 'Payment is still pending' : 'Payment status: ' . $paymentStatus
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Check payment status error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to check payment status: ' . $e->getMessage()
+            ], 500);
+        }
+    }
 }

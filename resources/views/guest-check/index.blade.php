@@ -15,10 +15,34 @@
         <div class="bg-white border-b">
             <div class="px-8 py-4">
                 <div class="flex items-center justify-between">
-                    <!-- Date Filter and Search -->
-                    <div class="flex items-center space-x-4">
-                        <!-- Date Filter -->
-                        <form method="GET" action="{{ route('guest-check.index') }}" class="flex items-center space-x-2">
+                    <!-- Search and Filter -->
+                    <div class="flex items-center space-x-4 w-full">
+                        <!-- Search Form - MOVED TO LEFT -->
+                        <form method="GET" action="{{ route('guest-check.index') }}" id="searchForm" class="w-80">
+                            <div class="relative">
+                                <input type="text" name="search" value="{{ $search }}" 
+                                       placeholder="Search guest or reservation..."
+                                       class="w-80 border rounded px-4 py-2 pl-10 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                       id="searchInput">
+                                <div class="absolute left-3 top-2.5 text-gray-400">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                                    </svg>
+                                </div>
+                                @if($search)
+                                <button type="button" onclick="clearSearch()" 
+                                        class="absolute right-2 top-2 text-gray-400 hover:text-gray-600">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                    </svg>
+                                </button>
+                                @endif
+                            </div>
+                        </form>
+
+                        <!-- Date Filter - MOVED TO RIGHT -->
+                        <form method="GET" action="{{ route('guest-check.index') }}" id="dateFilterForm" class="flex items-center space-x-2">
+                            <input type="hidden" name="search" value="{{ $search }}">
                             <input type="date" name="date" value="{{ $today }}" 
                                    class="border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
                             <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded text-sm hover:bg-blue-600 transition-colors">
@@ -27,28 +51,6 @@
                             <a href="{{ route('guest-check.index') }}" class="bg-gray-200 text-gray-700 px-4 py-2 rounded text-sm hover:bg-gray-300 transition-colors">
                                 Today
                             </a>
-                        </form>
-
-                        <!-- Search Form -->
-                        <form method="GET" action="{{ route('guest-check.index') }}" class="flex items-center">
-                            <div class="relative">
-                                <input type="text" name="search" value="{{ $search }}" 
-                                       placeholder="Search guest or reservation..."
-                                       class="border rounded px-3 py-2 text-sm w-64 focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-                                @if($search)
-                                <a href="{{ route('guest-check.index', ['date' => $today]) }}" 
-                                   class="absolute right-2 top-2 text-gray-400 hover:text-gray-600">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                                    </svg>
-                                </a>
-                                @endif
-                            </div>
-                            <button type="submit" class="ml-2 bg-gray-800 text-white px-4 py-2 rounded text-sm hover:bg-gray-900 transition-colors">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-                                </svg>
-                            </button>
                         </form>
                     </div>
                 </div>
@@ -294,7 +296,7 @@
                         <div class="flex items-center justify-between">
                             <div>
                                 <h2 class="text-lg font-semibold text-gray-800">Today's Departures</h2>
-                                <p class="text-sm text-gray-500">Guests scheduled to check-out on {{ \Carbon\Carbon::parse($today)->format('F d, Y') }}</p>
+                                <p class="text-sm text-gray-500">Guests who checked out on {{ \Carbon\Carbon::parse($today)->format('F d, Y') }}</p>
                             </div>
                             <div class="flex items-center space-x-4">
                                 @if($search)
@@ -318,8 +320,8 @@
                             <p class="text-lg font-medium mb-2">No check-outs found for "{{ $search }}"</p>
                             <p class="text-sm">Try a different search term or clear the search.</p>
                         @else
-                            <p class="text-lg font-medium mb-2">No check-outs scheduled for today</p>
-                            <p class="text-sm">All guests have checked out or no departures scheduled.</p>
+                            <p class="text-lg font-medium mb-2">No check-outs for today</p>
+                            <p class="text-sm">No guests have checked out today yet.</p>
                         @endif
                     </div>
                     @else
@@ -329,9 +331,10 @@
                                 <thead class="bg-gray-50">
                                     <tr>
                                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Guest</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reservation</th>
                                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Room(s)</th>
-                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Check-Out Time</th>
-                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Checked Out</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                                     </tr>
                                 </thead>
                                 <tbody class="bg-white divide-y divide-gray-200">
@@ -349,9 +352,16 @@
                                                         {{ $booking->reservation->guest->first_name }} {{ $booking->reservation->guest->last_name }}
                                                     </div>
                                                     <div class="text-sm text-gray-500">
-                                                        Room: {{ $booking->rooms->first()->room->room_number ?? 'N/A' }}
+                                                        {{ $booking->reservation->guest->email }}
                                                     </div>
                                                 </div>
+                                            </div>
+                                        </td>
+                                        <td class="px-4 py-3 whitespace-nowrap">
+                                            <div class="text-sm text-gray-900">#{{ $booking->reservation->reservation_id }}</div>
+                                            <div class="text-sm text-gray-500">
+                                                {{ \Carbon\Carbon::parse($booking->reservation->check_in_date)->format('M d') }} - 
+                                                {{ \Carbon\Carbon::parse($booking->reservation->check_out_date)->format('M d') }}
                                             </div>
                                         </td>
                                         <td class="px-4 py-3 whitespace-nowrap">
@@ -365,22 +375,20 @@
                                         </td>
                                         <td class="px-4 py-3 whitespace-nowrap">
                                             <div class="text-sm text-gray-900">
-                                                @if($booking->reservation->check_out_time)
-                                                    {{ \Carbon\Carbon::parse($booking->reservation->check_out_time)->format('g:i A') }}
+                                                @if($booking->actual_check_out)
+                                                    {{ \Carbon\Carbon::parse($booking->actual_check_out)->format('g:i A') }}
                                                 @else
-                                                    12:00 PM
+                                                    N/A
                                                 @endif
                                             </div>
-                                            <div class="text-xs text-gray-500">Expected</div>
+                                            <div class="text-xs text-gray-500">
+                                                {{ \Carbon\Carbon::parse($booking->actual_check_out)->format('M d, Y') }}
+                                            </div>
                                         </td>
-                                        <td class="px-4 py-3 whitespace-nowrap text-sm font-medium">
-                                            <button onclick="checkOutGuest('{{ $booking->booking_id }}', '{{ $booking->reservation->guest->first_name }} {{ $booking->reservation->guest->last_name }}')"
-                                                    class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-lg shadow-sm text-white bg-red-500 hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors">
-                                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
-                                                </svg>
-                                                Check Out
-                                            </button>
+                                        <td class="px-4 py-3 whitespace-nowrap">
+                                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
+                                                Checked Out
+                                            </span>
                                         </td>
                                     </tr>
                                     @endforeach
@@ -718,17 +726,30 @@ document.addEventListener('DOMContentLoaded', function() {
         showToast('error', '{{ session('error') }}');
     @endif
     
-    // Preserve search term in input when changing tabs
-    const searchInput = document.querySelector('input[name="search"]');
-    if (searchInput && searchInput.value) {
-        // Keep the search value when switching tabs
-        document.querySelectorAll('.tab-button').forEach(button => {
-            button.addEventListener('click', function() {
-                // Search is already preserved via form parameters
-            });
-        });
+    // Automatic search functionality
+    const searchInput = document.getElementById('searchInput');
+    const searchForm = document.getElementById('searchForm');
+    let searchTimeout;
+    
+    searchInput.addEventListener('input', function() {
+        // Clear previous timeout
+        clearTimeout(searchTimeout);
+        
+        // Set new timeout for 500ms after user stops typing
+        searchTimeout = setTimeout(() => {
+            if (searchInput.value.length >= 2 || searchInput.value.length === 0) {
+                searchForm.submit();
+            }
+        }, 500);
+    });
+    
+    // Clear search functionality
+    window.clearSearch = function() {
+        searchInput.value = '';
+        searchForm.submit();
     }
 });
+
 </script>
 
 <style>
