@@ -64,21 +64,10 @@ class GuestBookingController extends Controller
 
             Log::info('Validation passed for availability check');
             
-            // FIXED: Better availability check that looks for date conflicts
+            // FIXED: Using scope for clean availability check
             $availableRooms = Room::where('room_type_id', $request->room_type_id)
-                ->where('room_status', 'available')
-                ->whereDoesntHave('bookings', function($query) use ($request) {
-                    $query->whereHas('booking.reservation', function($q) use ($request) {
-                        // Check for overlapping dates with confirmed reservations
-                        $q->where(function($q2) use ($request) {
-                            // Date range overlaps: (StartA < EndB) AND (EndA > StartB)
-                            $q2->where('check_in_date', '<', $request->check_out_date)
-                               ->where('check_out_date', '>', $request->check_in_date);
-                        })
-                        ->whereIn('status', ['confirmed', 'checked_in', 'reserved']);
-                    });
-                })
-                ->get(); // Removed limit to get all available rooms
+                ->availableBetween($request->check_in_date, $request->check_out_date)
+                ->get();
 
             Log::info('Found ' . $availableRooms->count() . ' available rooms out of ' . $request->num_rooms . ' needed');
 
@@ -173,21 +162,11 @@ class GuestBookingController extends Controller
             $nights = $checkIn->diffInDays($checkOut);
             $totalAmount = $roomType->base_price * $nights * $request->num_rooms;
             
-            Log::info('Room type: ' . $roomType->room_type_name . ', Nights: ' . $nights . ', Total: ' . $totalAmount);
+            Log::info('Room type: ' . $roomType->type_name . ', Nights: ' . $nights . ', Total: ' . $totalAmount);
 
-            // FIXED: Check availability with proper date conflict logic
+            // FIXED: Using scope for clean availability check
             $availableRooms = Room::where('room_type_id', $request->room_type_id)
-                ->where('room_status', 'available')
-                ->whereDoesntHave('bookings', function($query) use ($request) {
-                    $query->whereHas('booking.reservation', function($q) use ($request) {
-                        $q->where(function($q2) use ($request) {
-                            // Date range overlaps: (StartA < EndB) AND (EndA > StartB)
-                            $q2->where('check_in_date', '<', $request->check_out_date)
-                               ->where('check_out_date', '>', $request->check_in_date);
-                        })
-                        ->whereIn('status', ['confirmed', 'checked_in', 'reserved']);
-                    });
-                })
+                ->availableBetween($request->check_in_date, $request->check_out_date)
                 ->limit($request->num_rooms)
                 ->get();
 
@@ -208,7 +187,7 @@ class GuestBookingController extends Controller
                 'temp_booking' => [
                     'reference' => $tempReference,
                     'room_type_id' => $roomType->room_type_id,
-                    'room_type_name' => $roomType->room_type_name,
+                    'room_type_name' => $roomType->type_name,
                     'check_in_date' => $request->check_in_date,
                     'check_out_date' => $request->check_out_date,
                     'num_rooms' => $request->num_rooms,
@@ -227,7 +206,7 @@ class GuestBookingController extends Controller
                 'success' => true,
                 'temp_reference' => $tempReference,
                 'booking_summary' => [
-                    'room_type' => $roomType->room_type_name,
+                    'room_type' => $roomType->type_name,
                     'check_in' => $request->check_in_date,
                     'check_out' => $request->check_out_date,
                     'nights' => $nights,
@@ -292,18 +271,9 @@ class GuestBookingController extends Controller
                 ], 400);
             }
 
-            // FIXED: Double-check room availability before confirming
+            // FIXED: Using scope for clean availability re-check
             $availableRooms = Room::where('room_type_id', $tempBooking['room_type_id'])
-                ->where('room_status', 'available')
-                ->whereDoesntHave('bookings', function($query) use ($tempBooking) {
-                    $query->whereHas('booking.reservation', function($q) use ($tempBooking) {
-                        $q->where(function($q2) use ($tempBooking) {
-                            $q2->where('check_in_date', '<', $tempBooking['check_out_date'])
-                               ->where('check_out_date', '>', $tempBooking['check_in_date']);
-                        })
-                        ->whereIn('status', ['confirmed', 'checked_in', 'reserved']);
-                    });
-                })
+                ->availableBetween($tempBooking['check_in_date'], $tempBooking['check_out_date'])
                 ->whereIn('room_id', $tempBooking['available_room_ids'])
                 ->limit($tempBooking['num_rooms'])
                 ->get();
@@ -350,7 +320,7 @@ class GuestBookingController extends Controller
                     'check_out_date' => $tempBooking['check_out_date'],
                     'num_guests' => $tempBooking['num_guests'],
                     'total_amount' => $tempBooking['total_amount'],
-                    'status' => 'pending', // Online payment is always pending until paid
+                    'status' => 'pending',
                     'reservation_type' => 'advance',
                     'booking_source' => 'online',
                     'special_requests' => $request->special_requests,
@@ -362,7 +332,7 @@ class GuestBookingController extends Controller
                 Log::info('Creating booking for reservation ID: ' . $reservation->reservation_id);
                 $booking = Booking::create([
                     'reservation_id' => $reservation->reservation_id,
-                    'booking_status' => 'pending', // Always pending for online payment
+                    'booking_status' => 'pending',
                     'booking_date' => now()
                 ]);
 
@@ -381,22 +351,19 @@ class GuestBookingController extends Controller
                     ]);
                     
                     Log::info('Room ' . $room->room_number . ' assigned to booking (status remains available until payment)');
-                    
-                    // IMPORTANT: Do NOT update room status yet - only when payment is confirmed
-                    // Room remains available for other bookings until payment completes
                 }
 
                 $transactionId = 'BOOK-' . strtoupper(uniqid());
                 Log::info('Generated transaction ID: ' . $transactionId);
 
-                // Create payment with pending status (will be updated when Stripe payment completes)
+                // Create payment with pending status
                 $payment = Payment::create([
                     'booking_id' => $booking->booking_id,
                     'amount' => $tempBooking['total_amount'],
-                    'payment_method' => 'online', // Always online now
-                    'payment_status' => 'pending', // Always pending for online payment
+                    'payment_method' => 'online',
+                    'payment_status' => 'pending',
                     'transaction_id' => $transactionId,
-                    'payment_date' => now(), // Will be set when payment completes
+                    'payment_date' => now(),
                     
                 ]);
 
@@ -469,7 +436,7 @@ class GuestBookingController extends Controller
                 'session_id' => $stripeResult['session_id'],
                 'payment_id' => $payment->payment_id,
                 'reservation_id' => $reservation->reservation_id,
-                'redirect_url' => $stripeResult['payment_url'] // This is the Stripe checkout URL
+                'redirect_url' => $stripeResult['payment_url']
             ]);
 
         } catch (\Exception $e) {

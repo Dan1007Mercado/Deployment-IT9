@@ -28,7 +28,6 @@ class Room extends Model
         return $this->belongsTo(RoomType::class, 'room_type_id');
     }
 
-    // Updated: Relationship to bookings through booking_rooms
     public function bookings()
     {
         return $this->hasMany(BookingRoom::class, 'room_id');
@@ -40,39 +39,38 @@ class Room extends Model
     }
 
     // -----------------------------------------
-    // Updated: Availability Logic
+    // NEW: Availability Scope (Clean & Reusable)
     // -----------------------------------------
 
     /**
+     * Scope to get rooms available between specific dates
+     */
+    public function scopeAvailableBetween($query, $checkIn, $checkOut)
+    {
+        return $query->where('room_status', 'available')
+            ->whereDoesntHave('bookings', function($q) use ($checkIn, $checkOut) {
+                $q->whereHas('booking.reservation', function($r) use ($checkIn, $checkOut) {
+                    $r->where('check_in_date', '<', $checkOut)
+                      ->where('check_out_date', '>', $checkIn)
+                      ->whereNotIn('status', ['cancelled', 'checked-out', 'no-show']);
+                })
+                ->whereHas('booking', function($bq) {
+                    $bq->whereNotIn('booking_status', ['cancelled', 'no-show', 'checked-out']);
+                });
+            });
+    }
+
+    /**
      * Get all rooms available for a specific date range.
+     * DEPRECATED: Use scopeAvailableBetween() instead
      */
     public static function getAvailableRooms($checkIn, $checkOut, $roomTypeId = null)
     {
-        $query = self::where('room_status', 'available');
+        $query = self::availableBetween($checkIn, $checkOut);
 
-        // Filter by Room Type if provided
         if ($roomTypeId) {
             $query->where('room_type_id', $roomTypeId);
         }
-
-        // 1. Exclude rooms with conflicting CONFIRMED BOOKINGS (UPDATED)
-        $query->whereDoesntHave('bookings', function($q) use ($checkIn, $checkOut) {
-            $q->whereHas('booking.reservation', function($sq) use ($checkIn, $checkOut) {
-                $sq->where('check_in_date', '<', $checkOut)
-                   ->where('check_out_date', '>', $checkIn)
-                   ->whereNotIn('status', ['cancelled']);
-            })
-            ->whereHas('booking', function($bq) {
-                $bq->whereNotIn('booking_status', ['cancelled', 'no-show', 'checked-out']);
-            });
-        });
-
-        // 2. Exclude rooms with active TEMPORARY HOLDS
-        $query->whereDoesntHave('roomHolds', function($q) use ($checkIn, $checkOut) {
-            $q->where('expires_at', '>', now())
-              ->where('check_in_date', '<', $checkOut)
-              ->where('check_out_date', '>', $checkIn);
-        });
 
         return $query->get();
     }
@@ -82,12 +80,12 @@ class Room extends Model
      */
     public function isAvailableForDates($checkIn, $checkOut)
     {
-        // Check conflicting bookings (UPDATED)
+        // Check conflicting bookings
         $hasConflict = $this->bookings()
             ->whereHas('booking.reservation', function($q) use ($checkIn, $checkOut) {
                 $q->where('check_in_date', '<', $checkOut)
                   ->where('check_out_date', '>', $checkIn)
-                  ->whereNotIn('status', ['cancelled']);
+                  ->whereNotIn('status', ['cancelled', 'checked-out', 'no-show']);
             })
             ->whereHas('booking', function($bq) {
                 $bq->whereNotIn('booking_status', ['cancelled', 'no-show', 'checked-out']);

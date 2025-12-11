@@ -84,9 +84,36 @@
             animation: slideUp 0.6s ease-out forwards;
         }
         
-        /* Toast notifications */
+        /* Toast notifications - FIXED FOR MODAL VISIBILITY */
+        #toast-container {
+            z-index: 9999 !important;
+            pointer-events: none;
+        }
+        
         .toast {
             animation: slideInRight 0.3s ease-out;
+            pointer-events: auto;
+            z-index: 10000;
+            position: relative;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(10px);
+            filter: drop-shadow(0 10px 20px rgba(0, 0, 0, 0.3));
+        }
+        
+        .toast.bg-green-500 {
+            background-color: rgba(16, 185, 129, 0.95) !important;
+        }
+        
+        .toast.bg-red-500 {
+            background-color: rgba(239, 68, 68, 0.95) !important;
+        }
+        
+        .toast.bg-blue-500 {
+            background-color: rgba(59, 130, 246, 0.95) !important;
+        }
+        
+        .toast.bg-yellow-500 {
+            background-color: rgba(245, 158, 11, 0.95) !important;
         }
         
         @keyframes slideInRight {
@@ -97,6 +124,22 @@
             to {
                 transform: translateX(0);
                 opacity: 1;
+            }
+        }
+        
+        /* Toast exit animation */
+        .toast-exit {
+            animation: slideOutRight 0.3s ease-out forwards;
+        }
+        
+        @keyframes slideOutRight {
+            from {
+                transform: translateX(0);
+                opacity: 1;
+            }
+            to {
+                transform: translateX(100%);
+                opacity: 0;
             }
         }
 
@@ -153,6 +196,24 @@
             .amenity-card {
                 min-height: 180px;
             }
+        }
+        
+        /* Modal backdrop adjustment */
+        .modal-backdrop {
+            z-index: 50;
+        }
+        
+        .modal-content {
+            z-index: 60;
+        }
+        
+        /* Ensure modals don't interfere with toasts */
+        .modal {
+            z-index: 100;
+        }
+        
+        .modal .fixed {
+            z-index: 100;
         }
     </style>
 </head>
@@ -419,13 +480,13 @@
         </section>
     </main>
 
-    {{-- Toast Container --}}
-    <div id="toast-container" class="fixed top-4 right-4 z-50 space-y-2"></div>
+    {{-- Toast Container - FIXED WITH HIGHER Z-INDEX --}}
+    <div id="toast-container" class="fixed top-4 right-4 z-[9999] space-y-2"></div>
 
     {{-- Booking Flow Modals --}}
     
     <!-- Guest + Dates Modal -->
-    <div id="guestDatesModal" class="hidden fixed inset-0 z-50 bg-black/80" onclick="closeModalOnBackdrop('guestDatesModal')">
+    <div id="guestDatesModal" class="hidden modal fixed inset-0 z-50 bg-black/80" onclick="closeModalOnBackdrop('guestDatesModal')">
         <div class="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg bg-white rounded-lg shadow-lg p-4 sm:p-6 max-h-[90vh] overflow-y-auto custom-scrollbar" onclick="event.stopPropagation()">
             <div class="flex items-center justify-between mb-4 sm:mb-6">
                 <h2 class="text-xl sm:text-2xl font-bold">Guest Information & Dates</h2>
@@ -519,7 +580,7 @@
     </div>
 
     <!-- Rooms Selection Modal -->
-    <div id="roomsModal" class="hidden fixed inset-0 z-50 bg-black/80" onclick="closeModalOnBackdrop('roomsModal')">
+    <div id="roomsModal" class="hidden modal fixed inset-0 z-50 bg-black/80" onclick="closeModalOnBackdrop('roomsModal')">
         <div class="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-6xl bg-white rounded-lg shadow-lg p-4 sm:p-6 max-h-[90vh] overflow-y-auto custom-scrollbar" onclick="event.stopPropagation()">
             <div class="flex items-center justify-between mb-4 sm:mb-6">
                 <h2 class="text-xl sm:text-2xl font-bold">Select Rooms</h2>
@@ -608,7 +669,7 @@
     </div>
 
     <!-- Payment Modal -->
-    <div id="paymentModal" class="hidden fixed inset-0 z-50 bg-black/80" onclick="closeModalOnBackdrop('paymentModal')">
+    <div id="paymentModal" class="hidden modal fixed inset-0 z-50 bg-black/80" onclick="closeModalOnBackdrop('paymentModal')">
         <div class="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl bg-white rounded-lg shadow-lg p-4 sm:p-6 max-h-[90vh] overflow-y-auto custom-scrollbar" onclick="event.stopPropagation()">
             <div class="flex items-center justify-between mb-4 sm:mb-6">
                 <h2 class="text-xl sm:text-2xl font-bold">Complete Your Booking</h2>
@@ -675,7 +736,7 @@
     </div>
 
     <!-- Success Modal -->
-    <div id="successModal" class="hidden fixed inset-0 z-50 bg-black/80" onclick="closeModalOnBackdrop('successModal')">
+    <div id="successModal" class="hidden modal fixed inset-0 z-50 bg-black/80" onclick="closeModalOnBackdrop('successModal')">
         <div class="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-white rounded-lg shadow-lg overflow-hidden" onclick="event.stopPropagation()">
             <div class="bg-gradient-to-br from-green-50 to-white p-4 sm:p-6 md:p-8">
                 <div class="text-center mb-4 sm:mb-6">
@@ -748,7 +809,7 @@
         // Initialize Lucide icons
         lucide.createIcons();
 
-        // Toast notification
+        // Toast notification - FIXED FOR MODAL VISIBILITY
         function showToast(message, type = 'info') {
             const toastContainer = document.getElementById('toast-container');
             const toastId = 'toast-' + Date.now();
@@ -762,10 +823,11 @@
             
             const toast = document.createElement('div');
             toast.id = toastId;
-            toast.className = `${typeClasses[type]} rounded-lg shadow-lg p-3 sm:p-4 flex items-center justify-between min-w-60 sm:min-w-80 transform transition-all duration-300 translate-x-full toast`;
+            toast.className = `toast ${typeClasses[type]} rounded-lg p-3 sm:p-4 flex items-center justify-between min-w-60 sm:min-w-80 transform transition-all duration-300 translate-x-full`;
             toast.innerHTML = `
                 <div class="flex items-center text-sm sm:text-base">
-                    <span>${message}</span>
+                    ${type === 'success' ? '✓' : type === 'error' ? '✗' : type === 'warning' ? '⚠' : 'ℹ'}
+                    <span class="ml-2">${message}</span>
                 </div>
                 <button onclick="closeToast('${toastId}')" class="ml-2 sm:ml-4 text-white hover:text-gray-200">
                     ✕
@@ -783,14 +845,18 @@
             setTimeout(() => {
                 closeToast(toastId);
             }, 5000);
+            
+            return toastId;
         }
         
         function closeToast(toastId) {
             const toast = document.getElementById(toastId);
             if (toast) {
-                toast.classList.add('translate-x-full', 'opacity-0');
+                toast.classList.add('toast-exit');
                 setTimeout(() => {
-                    toast.remove();
+                    if (toast.parentNode) {
+                        toast.remove();
+                    }
                 }, 300);
             }
         }
