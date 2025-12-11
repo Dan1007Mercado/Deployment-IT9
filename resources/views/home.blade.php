@@ -234,10 +234,6 @@
                                 <div class="absolute top-3 left-3 sm:top-4 sm:left-4 px-2 py-1 sm:px-3 sm:py-1 rounded-full text-xs font-semibold bg-blue-500 text-white">
                                     {{ $roomType->type_name }}
                                 </div>
-                                <!-- Available Rooms -->
-                                <div class="absolute bottom-3 left-3 sm:bottom-4 sm:left-4 px-2 py-1 rounded-full text-xs font-semibold bg-white/90 text-gray-700">
-                                    {{ $availableRooms }} available
-                                </div>
                             </div>
                             
                             <div class="p-4 sm:p-5">

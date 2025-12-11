@@ -133,7 +133,7 @@ Route::middleware('auth')->group(function () {
     });
     
     // Legacy Report Routes
-    Route::get('/report', [ReportController::class, 'index'])->name('report');
+    Route::get('/report', [ReportController::class, 'index'])->name('report'); // Single: 'report'
     Route::post('/report/generate', [ReportController::class, 'generate'])->name('report.generate');
     Route::get('/report/download/{id}', [ReportController::class, 'download'])->name('report.download');
     Route::get('/report/view/{id}', [ReportController::class, 'view'])->name('report.view');

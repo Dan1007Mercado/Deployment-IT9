@@ -13,7 +13,6 @@ use App\Models\RoomType;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
 use Barryvdh\DomPDF\Facade\Pdf;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
 
 class ReportController extends Controller
@@ -56,7 +55,7 @@ class ReportController extends Controller
             $recentReports = Report::latest()->paginate(10);
         } catch (\Exception $e) {
             // If Report model doesn't exist yet, use empty paginator
-            $recentReports = Report::latest()->paginate(10);
+            $recentReports = collect([])->paginate(10);
         }
 
         return view('reports', [
@@ -72,7 +71,7 @@ class ReportController extends Controller
             'avgDailyRevenue' => $avgDailyRevenue,
             'peakSeasonOccupancy' => 85,
             'seasonalGrowth' => 18.5,
-            'recentReports' => $recentReports, // Now a paginator instance
+            'recentReports' => $recentReports,
             'defaultStartDate' => $thirtyDaysAgo->format('Y-m-d'),
             'defaultEndDate' => $today->format('Y-m-d'),
         ]);
@@ -110,15 +109,13 @@ class ReportController extends Controller
             // Set paper size and orientation
             $pdf->setPaper('A4', 'portrait');
             
-            // Generate filename
+            // Get PDF content and encode as Base64
+            $pdfContent = $pdf->output();
+            $encodedContent = base64_encode($pdfContent);
+            $fileSize = strlen($pdfContent); // Use original PDF size, not encoded
+            
+            // Generate filename for reference
             $filename = 'report_' . str_replace(' ', '_', strtolower($documentName)) . '_' . time() . '.pdf';
-            $filePath = 'reports/' . $filename;
-            
-            // Ensure reports directory exists
-            Storage::disk('public')->makeDirectory('reports');
-            
-            // Save PDF to storage
-            Storage::disk('public')->put($filePath, $pdf->output());
             
             // Save report record to database
             $report = Report::create([
@@ -126,7 +123,10 @@ class ReportController extends Controller
                 'type' => $reportType,
                 'start_date' => $startDate,
                 'end_date' => $endDate,
-                'file_path' => $filePath,
+                'file_path' => 'database://' . $filename, // Mark as stored in database
+                'file_content' => ['data' => $encodedContent],
+                'file_size' => $fileSize,
+                'mime_type' => 'application/pdf',
                 'generated_by' => auth()->id(),
             ]);
             
@@ -152,17 +152,26 @@ class ReportController extends Controller
         try {
             $report = Report::findOrFail($id);
             
-            if (!$report->file_path || !Storage::disk('public')->exists($report->file_path)) {
-                throw new \Exception('Report file not found. It may have been deleted.');
+            // First try to get from database storage
+            if ($report->hasFileContent()) {
+                $pdfContent = $report->getPdfContent();
+                $filename = $this->generateDownloadFilename($report);
+                
+                return response()->streamDownload(function () use ($pdfContent) {
+                    echo $pdfContent;
+                }, $filename, [
+                    'Content-Type' => 'application/pdf',
+                    'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+                    'Content-Length' => strlen($pdfContent),
+                ]);
             }
             
-            $filePath = Storage::disk('public')->path($report->file_path);
-            $filename = $this->generateDownloadFilename($report);
+            // Fallback to old file_path method (if you have existing reports)
+            if ($report->file_path && Storage::exists($report->file_path)) {
+                return Storage::download($report->file_path, $this->generateDownloadFilename($report));
+            }
             
-            return response()->download($filePath, $filename, [
-                'Content-Type' => 'application/pdf',
-                'Content-Disposition' => 'attachment; filename="' . $filename . '"',
-            ]);
+            throw new \Exception('Report file not found. It may have been deleted.');
             
         } catch (\Exception $e) {
             Log::error('Report download failed: ' . $e->getMessage());
@@ -175,16 +184,26 @@ class ReportController extends Controller
         try {
             $report = Report::findOrFail($id);
             
-            if (!$report->file_path || !Storage::disk('public')->exists($report->file_path)) {
-                throw new \Exception('Report file not found. It may have been deleted.');
+            // First try to get from database storage
+            if ($report->hasFileContent()) {
+                $pdfContent = $report->getPdfContent();
+                
+                return response($pdfContent, 200, [
+                    'Content-Type' => 'application/pdf',
+                    'Content-Disposition' => 'inline; filename="' . $report->name . '.pdf"',
+                    'Content-Length' => strlen($pdfContent),
+                ]);
             }
             
-            $filePath = Storage::disk('public')->path($report->file_path);
+            // Fallback to old file_path method
+            if ($report->file_path && Storage::exists($report->file_path)) {
+                return response()->file(Storage::path($report->file_path), [
+                    'Content-Type' => 'application/pdf',
+                    'Content-Disposition' => 'inline; filename="' . $report->name . '.pdf"',
+                ]);
+            }
             
-            return response()->file($filePath, [
-                'Content-Type' => 'application/pdf',
-                'Content-Disposition' => 'inline; filename="' . $report->name . '.pdf"',
-            ]);
+            throw new \Exception('Report file not found. It may have been deleted.');
             
         } catch (\Exception $e) {
             Log::error('Report view failed: ' . $e->getMessage());
@@ -242,24 +261,22 @@ class ReportController extends Controller
             $currentDate->addDay();
         }
 
-        // Revenue by room type (actual calculation if possible, otherwise realistic estimates)
+        // Revenue by room type
         $roomTypes = RoomType::all();
         $revenueByRoomType = [];
         
         foreach ($roomTypes as $roomType) {
-            // Try to get actual bookings for this room type
             $bookingsCount = Booking::whereHas('reservation', function($query) use ($roomType, $startDate, $endDate) {
                 $query->where('room_type_id', $roomType->id)
                       ->whereBetween('check_in_date', [$startDate, $endDate]);
             })->count();
             
-            // Estimate revenue based on bookings and room price
             $estimatedRevenue = $bookingsCount * $roomType->base_price;
             
             $revenueByRoomType[] = [
                 'room_type_name' => $roomType->type_name,
                 'bookings' => $bookingsCount,
-                'nights_sold' => $bookingsCount * rand(1, 3), // Estimate nights
+                'nights_sold' => $bookingsCount * rand(1, 3),
                 'revenue' => $estimatedRevenue,
                 'average_rate' => $bookingsCount > 0 ? $estimatedRevenue / $bookingsCount : $roomType->base_price
             ];
@@ -303,7 +320,6 @@ class ReportController extends Controller
         $totalAvailableNights = 0;
         
         while ($currentDate <= $endDate) {
-            // Count occupied rooms for this day
             $occupiedRooms = Booking::whereHas('reservation', function($query) use ($currentDate) {
                 $query->where('check_in_date', '<=', $currentDate)
                       ->where('check_out_date', '>', $currentDate)
@@ -313,7 +329,6 @@ class ReportController extends Controller
             $availableRooms = $totalRooms;
             $occupancyRate = $availableRooms > 0 ? ($occupiedRooms / $availableRooms) * 100 : 0;
             
-            // Calculate ADR (Average Daily Rate) for this day
             $dayRevenue = Payment::whereDate('payment_date', $currentDate)
                 ->where('payment_status', 'completed')
                 ->sum('amount');
@@ -336,10 +351,8 @@ class ReportController extends Controller
             $currentDate->addDay();
         }
 
-        // Calculate average occupancy
         $avgOccupancy = $totalAvailableNights > 0 ? ($totalOccupiedNights / $totalAvailableNights) * 100 : 0;
 
-        // Find peak and low occupancy days
         if (!empty($dailyOccupancy)) {
             $peakDay = collect($dailyOccupancy)->sortByDesc('occupancy_rate')->first();
             $lowDay = collect($dailyOccupancy)->sortBy('occupancy_rate')->first();
@@ -363,7 +376,6 @@ class ReportController extends Controller
 
     private function generateGuestReport($startDate, $endDate)
     {
-        // Get guests with reservations in the period
         $guests = Guest::whereHas('reservations', function($query) use ($startDate, $endDate) {
             $query->whereBetween('check_in_date', [$startDate, $endDate]);
         })->withCount(['reservations' => function($query) use ($startDate, $endDate) {
@@ -374,14 +386,12 @@ class ReportController extends Controller
 
         $totalGuests = $guests->count();
         
-        // Identify returning guests
         $returningGuests = $guests->filter(function($guest) {
             return $guest->reservations_count > 1;
         })->count();
         
         $newGuests = $totalGuests - $returningGuests;
 
-        // Calculate average length of stay
         $totalNights = 0;
         $totalStays = 0;
         
@@ -394,7 +404,6 @@ class ReportController extends Controller
         
         $avgLengthOfStay = $totalStays > 0 ? $totalNights / $totalStays : 0;
 
-        // Get top guests by revenue
         $topGuests = $guests->map(function($guest) {
             $totalRevenue = $guest->reservations->sum('total_amount');
             
@@ -408,7 +417,6 @@ class ReportController extends Controller
             ];
         })->sortByDesc('total_revenue')->take(10)->values()->toArray();
 
-        // Guest Type Analysis (REAL DATA - you have this!)
         $guestTypes = [
             'walk_in' => $guests->where('guest_type', 'walk-in')->count(),
             'advance' => $guests->where('guest_type', 'advance')->count(),
@@ -421,7 +429,6 @@ class ReportController extends Controller
             'avgLengthOfStay' => round($avgLengthOfStay, 1),
             'topGuests' => $topGuests,
             'guestTypes' => $guestTypes,
-            // REMOVED: 'guestCountries' - We don't have this data
         ];
     }
 
@@ -431,6 +438,7 @@ class ReportController extends Controller
             'revenue' => 'Revenue Analysis Report',
             'occupancy' => 'Occupancy Performance Report',
             'guest' => 'Guest Demographics Report',
+            'financial' => 'Financial Summary Report'
         ];
         
         return $names[$reportType] ?? 'Custom Report';

@@ -16,9 +16,9 @@ return new class extends Migration
             $table->foreignId('booking_id')->constrained('bookings', 'booking_id');
             $table->decimal('amount', 10, 2);
             $table->timestamp('payment_date')->useCurrent();
-            $table->enum('payment_method', ['cash', 'credit_card', 'debit_card', 'online']);
+            $table->enum('payment_method', ['cash', 'credit_card',  'online']);
             $table->string('transaction_id', 100)->nullable();
-            $table->enum('payment_status', ['pending', 'completed', 'failed', 'refunded'])->default('pending');
+            $table->enum('payment_status', ['pending', 'completed', 'refunded'])->default('pending');
             $table->string('sandbox_reference', 100)->nullable();
             $table->timestamps();
             $table->index('payment_method');
