@@ -473,12 +473,7 @@
                                class="w-full px-3 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" required>
                     </div>
 
-                    <div>
-                        <label class="block text-xs sm:text-sm font-medium mb-1">Special Requests (Optional)</label>
-                        <textarea id="guestRequests" name="special_requests" rows="2"
-                                  class="w-full px-3 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                  placeholder="Any special requirements..."></textarea>
-                    </div>
+                    
                 </div>
 
                 <!-- Dates Selection -->
@@ -1016,7 +1011,6 @@
                         bookingData.last_name = lastName;
                         bookingData.email = email;
                         bookingData.contact_number = phone;
-                        bookingData.special_requests = document.getElementById('guestRequests').value;
                         bookingData.check_in_date = checkIn;
                         bookingData.check_out_date = checkOut;
                         bookingData.num_guests = parseInt(numGuests);

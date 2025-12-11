@@ -11,7 +11,9 @@ return new class extends Migration
         Schema::table('payments', function (Blueprint $table) {
             // Add if not exists
             if (!Schema::hasColumn('payments', 'stripe_payment_url')) {
-                $table->text('stripe_payment_url')->nullable()->after('payment_method');
+                $table->string('stripe_session_id')->nullable()->after('payment_method');
+                $table->text('stripe_payment_url')->nullable()->after('stripe_session_id');
+                
             }
         });
     }

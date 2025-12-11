@@ -396,8 +396,8 @@ class GuestBookingController extends Controller
                     'payment_method' => 'online', // Always online now
                     'payment_status' => 'pending', // Always pending for online payment
                     'transaction_id' => $transactionId,
-                    'payment_date' => null, // Will be set when payment completes
-                    'notes' => 'Online booking payment (pending)'
+                    'payment_date' => now(), // Will be set when payment completes
+                    
                 ]);
 
                 Log::info('Payment created with ID: ' . $payment->payment_id . ', Status: pending (online payment)');
