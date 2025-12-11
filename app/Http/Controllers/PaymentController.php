@@ -226,7 +226,7 @@ class PaymentController extends Controller
                 'payment_status' => 'pending',
                 'transaction_id' => $stripeResult['session_id'],
                 'stripe_payment_url' => $stripeResult['payment_url'],
-                'payment_date' => null
+                'payment_date' => now()
             ]);
 
             DB::commit();
