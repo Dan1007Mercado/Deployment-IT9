@@ -15,17 +15,35 @@ class GmailService
     protected $client;
     protected $service;
     protected $isAuthenticated = false;
-
     public function __construct()
     {
         $this->client = new Google_Client();
         $this->client->setApplicationName(config('app.name'));
         $this->client->setScopes(Google_Service_Gmail::GMAIL_SEND);
-        $this->client->setAuthConfig(storage_path('app/credentials.json'));
+        
+        // Try environment variable first (production)
+        $googleCreds = env('GOOGLE_CREDENTIALS');
+        if ($googleCreds) {
+            $credentials = json_decode($googleCreds, true);
+            $this->client->setAuthConfig($credentials);
+        } else {
+            // Fallback to file (local development)
+            $credPath = storage_path('app/credentials.json');
+            if (file_exists($credPath)) {
+                $this->client->setAuthConfig($credPath);
+            }
+        }
+        
         $this->client->setAccessType('offline');
         $this->client->setPrompt('select_account consent');
-        $this->client->setRedirectUri(url('http://localhost:8000/oauth2callback'));
-
+        
+        // Use dynamic URL based on environment
+        $redirectUri = config('app.env') === 'production' 
+            ? url('/oauth2callback') 
+            : 'http://localhost:8000/oauth2callback';
+        
+        $this->client->setRedirectUri($redirectUri);
+    
         try {
             // Load or get new token
             $this->setAccessToken();
@@ -36,34 +54,43 @@ class GmailService
             $this->isAuthenticated = false;
         }
     }
-
+    
     private function setAccessToken()
     {
-        $tokenPath = storage_path('app/gmail-token.json');
+        // Try environment variable first (production)
+        $gmailToken = env('GMAIL_TOKEN');
         
-        if (!file_exists($tokenPath)) {
-            throw new \Exception('Gmail token not found. Please run php artisan gmail:setup');
+        if ($gmailToken) {
+            // Production: use env variable
+            $accessToken = json_decode($gmailToken, true);
+            $this->client->setAccessToken($accessToken);
+        } else {
+            // Local: use file
+            $tokenPath = storage_path('app/gmail-token.json');
+            
+            if (!file_exists($tokenPath)) {
+                throw new \Exception('Gmail token not found. Please run php artisan gmail:setup');
+            }
+    
+            $accessToken = json_decode(file_get_contents($tokenPath), true);
+            $this->client->setAccessToken($accessToken);
         }
-
-        $accessToken = json_decode(file_get_contents($tokenPath), true);
-        $this->client->setAccessToken($accessToken);
-
+    
         // If token is expired, refresh it
         if ($this->client->isAccessTokenExpired()) {
             if ($this->client->getRefreshToken()) {
                 $accessToken = $this->client->fetchAccessTokenWithRefreshToken($this->client->getRefreshToken());
+                
+                // Save the new token (only works locally, not on Render)
+                $tokenPath = storage_path('app/gmail-token.json');
+                if (file_exists(dirname($tokenPath))) {
+                    file_put_contents($tokenPath, json_encode($this->client->getAccessToken()));
+                }
             } else {
                 throw new \Exception('Refresh token is missing. Please re-authenticate.');
             }
-            
-            // Save the new token
-            if (!file_exists(dirname($tokenPath))) {
-                mkdir(dirname($tokenPath), 0700, true);
-            }
-            file_put_contents($tokenPath, json_encode($this->client->getAccessToken()));
         }
     }
-
     public function isAuthenticated()
     {
         return $this->isAuthenticated;
