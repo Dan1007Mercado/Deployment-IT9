@@ -327,7 +327,7 @@
                                     </div>
                                     
                                     <button 
-                                        onclick="startBooking({{ $roomType->room_type_id }})"
+                                        onclick="startBooking({{ $roomType->room_type_id }}, {{ $roomType->capacity }})"
                                         class="w-full sm:w-auto inline-flex items-center justify-center rounded-md px-3 sm:px-4 py-2 bg-blue-700 text-white hover:bg-blue-800 transition-colors shadow-sm hover:shadow-md hover-lift text-xs sm:text-sm"
                                     >
                                         <i data-lucide="calendar" class="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2"></i>
@@ -523,14 +523,15 @@
                         <div id="guestEmailError" class="text-red-500 text-xs mt-1 hidden"></div>
                         <div id="guestEmailSuccess" class="text-green-500 text-xs mt-1 hidden"></div>
                     </div>
-
-                    <div class="mb-3 sm:mb-4">
+                    <div class="mb-3 sm:mb-4 relative">
                         <label class="block text-xs sm:text-sm font-medium mb-1">Contact Number *</label>
                         <input type="tel" id="guestPhone" name="contact_number" 
-                               class="w-full px-3 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" required>
+                            class="w-full px-3 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="09********9"
+                            oninput="validatePhoneNumber()"
+                            required>
+                        <div id="phone-error" class="text-red-500 text-xs mt-1 hidden"></div>
                     </div>
-
-                    
                 </div>
 
                 <!-- Dates Selection -->
@@ -550,16 +551,23 @@
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                        <div>
-                            <label class="block text-xs sm:text-sm font-medium mb-1">Number of Guests *</label>
-                            <input type="number" id="numGuests" name="num_guests" min="1" value="1"
-                                   class="w-full px-3 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" required>
-                        </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-3 sm:mb-4">
                         <div>
                             <label class="block text-xs sm:text-sm font-medium mb-1">Number of Rooms *</label>
                             <input type="number" id="numRooms" name="num_rooms" min="1" max="5" value="1"
                                    class="w-full px-3 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" required>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-xs sm:text-sm font-medium mb-1">Number of Guests *</label>
+                            <input type="number" id="numGuests" name="num_guests" min="1" max="8" value="1"
+                                   class="w-full px-3 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                   oninput="validateGuestCount()"
+                                   required>
+                            <div id="guests-error" class="text-red-500 text-xs mt-1 hidden"></div>
+                            <div id="guests-max-info" class="text-xs text-gray-500 mt-1 hidden">
+                                Maximum <span id="max-guests-display"></span> guests allowed for selected room type
+                            </div>
                         </div>
                     </div>
 
@@ -570,8 +578,8 @@
                 </div>
 
                 <div class="flex justify-end pt-3 sm:pt-4">
-                    <button onclick="checkAvailabilityAndProceed()" 
-                            class="px-4 sm:px-6 py-2 text-sm sm:text-base bg-blue-700 text-white rounded-lg hover:bg-blue-800 transition-colors">
+                    <button id="nextToRoomsBtn" onclick="validateAndProceedToRooms()" 
+                            class="px-4 sm:px-6 py-2 text-sm sm:text-base bg-gray-300 text-gray-500 rounded-lg cursor-not-allowed" disabled>
                         Next: Select Rooms
                     </button>
                 </div>
@@ -693,8 +701,6 @@
                 <div>
                     <label class="block text-xs sm:text-sm font-medium mb-2 sm:mb-3">Payment Method *</label>
                     <div class="space-y-2 sm:space-y-3">
-                        
-
                         <!-- Online -->
                         <label class="flex items-center space-x-2 sm:space-x-3 border rounded-lg p-3 sm:p-4 cursor-pointer hover:bg-gray-50 transition-colors payment-method">
                             <input type="radio" name="paymentMethod" value="online" class="w-4 h-4 text-blue-600">
@@ -800,11 +806,13 @@
     <script>
         // Global variables
         let selectedRoomTypeId = null;
+        let selectedRoomTypeCapacity = null;
         let selectedRooms = [];
         let bookingData = {};
         let tempReference = null;
         let maxRoomsToSelect = 1;
         let availableRoomsData = [];
+        let emailValidated = false;
 
         // Initialize Lucide icons
         lucide.createIcons();
@@ -862,26 +870,36 @@
         }
 
         // Start booking process
-        function startBooking(roomTypeId) {
-            console.log('Starting booking for room type:', roomTypeId);
+        function startBooking(roomTypeId, roomCapacity) {
+            console.log('Starting booking for room type:', roomTypeId, 'capacity:', roomCapacity);
             selectedRoomTypeId = roomTypeId;
+            selectedRoomTypeCapacity = roomCapacity;
             
             // Reset previous selections
             selectedRooms = [];
             bookingData = {};
             tempReference = null;
+            emailValidated = false;
             
             // Get room type info for display
-            const roomCard = document.querySelector(`[onclick="startBooking(${roomTypeId})"]`).closest('.overflow-hidden');
+            const roomCard = document.querySelector(`[onclick="startBooking(${roomTypeId}, ${roomCapacity})"]`).closest('.overflow-hidden');
             const roomTypeName = roomCard.querySelector('h3').textContent;
             const roomTypePrice = roomCard.querySelector('.text-lg').textContent.replace('₱', '').replace(',', '').split(' ')[0];
             
             // Store for later use
             bookingData.room_type_name = roomTypeName;
             bookingData.room_type_price = parseFloat(roomTypePrice);
+            bookingData.room_type_capacity = roomCapacity;
+            
+            // Update max guests display
+            document.getElementById('max-guests-display').textContent = roomCapacity;
+            document.getElementById('guests-max-info').classList.remove('hidden');
             
             // Show guest + dates modal
             showGuestDatesModal();
+            
+            // Validate guest count initially
+            validateGuestCount();
         }
 
         // Modal functions
@@ -962,6 +980,7 @@
                     emailError.classList.remove('hidden');
                     emailField.classList.add('border-red-500');
                 }
+                emailValidated = false;
                 return false;
             }
             
@@ -985,21 +1004,120 @@
                     emailError.textContent = data.error_message || 'Email already registered to a different person';
                     emailError.classList.remove('hidden');
                     emailField.classList.add('border-red-500');
+                    emailValidated = false;
+                    showToast(data.error_message, 'error');
                     return false;
                 } else if (data.exists) {
                     emailSuccess.textContent = `Welcome back ${data.guest_name}!`;
                     emailSuccess.classList.remove('hidden');
                     emailField.classList.add('border-green-500');
+                    emailValidated = true;
+                    showToast(`Welcome back ${data.guest_name}!`, 'success');
                 } else {
                     emailSuccess.textContent = 'Email is available';
                     emailSuccess.classList.remove('hidden');
                     emailField.classList.add('border-green-500');
+                    emailValidated = true;
                 }
                 return true;
             } catch (error) {
                 console.error('Email validation error:', error);
-                return true;
+                emailError.textContent = 'Failed to validate email. Please try again.';
+                emailError.classList.remove('hidden');
+                emailField.classList.add('border-red-500');
+                emailValidated = false;
+                return false;
             }
+        }
+
+        // Guest count validation (similar to dashboard)
+        function validateGuestCount() {
+            const guestsInput = document.getElementById('numGuests');
+            const guestsError = document.getElementById('guests-error');
+            const nextButton = document.getElementById('nextToRoomsBtn');
+            const guests = parseInt(guestsInput.value);
+            
+            // Clear previous states
+            guestsError.textContent = '';
+            guestsError.classList.add('hidden');
+            guestsInput.classList.remove('border-red-500', 'border-green-500');
+            
+            // Disable next button by default
+            nextButton.disabled = true;
+            nextButton.classList.remove('bg-blue-700', 'text-white', 'hover:bg-blue-800');
+            nextButton.classList.add('bg-gray-300', 'text-gray-500', 'cursor-not-allowed');
+            
+            // Check if empty
+            if (!guests || isNaN(guests)) {
+                guestsError.textContent = 'Number of guests is required';
+                guestsError.classList.remove('hidden');
+                guestsInput.classList.add('border-red-500');
+                return false;
+            }
+            
+            // Check if within range (1 to room capacity)
+            if (guests < 1 || guests > selectedRoomTypeCapacity) {
+                guestsError.textContent = `Number of guests must be between 1 and ${selectedRoomTypeCapacity} for this room type`;
+                guestsError.classList.remove('hidden');
+                guestsInput.classList.add('border-red-500');
+                return false;
+            }
+            
+            // If valid, show green border and enable button
+            guestsInput.classList.add('border-green-500');
+            
+            // Only enable button if all other validations pass
+            const phoneValid = validatePhoneNumber();
+            const emailField = document.getElementById('guestEmail');
+            const email = emailField.value;
+            
+            if (phoneValid && email && emailValidated) {
+                nextButton.disabled = false;
+                nextButton.classList.remove('bg-gray-300', 'text-gray-500', 'cursor-not-allowed');
+                nextButton.classList.add('bg-blue-700', 'text-white', 'hover:bg-blue-800');
+            }
+            
+            return true;
+        }
+
+        // Simple phone number validation
+        function validatePhoneNumber() {
+            const phoneInput = document.getElementById('guestPhone');
+            const phoneError = document.getElementById('phone-error');
+            const phone = phoneInput.value.trim();
+            
+            // Clear previous states
+            phoneError.textContent = '';
+            phoneError.classList.add('hidden');
+            phoneInput.classList.remove('border-red-500', 'border-green-500');
+            
+            // If empty, just return (required field will handle this)
+            if (phone === '') {
+                return false;
+            }
+            
+            // Remove any spaces or dashes for validation
+            const cleaned = phone.replace(/\D/g, '');
+            
+            // Check if starts with 09
+            if (!cleaned.startsWith('09')) {
+                phoneError.textContent = 'Phone number must start with 09';
+                phoneError.classList.remove('hidden');
+                phoneInput.classList.add('border-red-500');
+                return false;
+            }
+            
+            // Check if exactly 11 digits
+            if (cleaned.length !== 11) {
+                phoneError.textContent = 'Phone number must be 11 digits (e.g., 09123456789)';
+                phoneError.classList.remove('hidden');
+                phoneInput.classList.add('border-red-500');
+                return false;
+            }
+            
+            // If valid, show green border
+            phoneInput.classList.add('border-green-500');
+            return true;
         }
 
         // Calculate nights
@@ -1015,21 +1133,47 @@
             return 0;
         }
 
-        // Check availability and proceed to room selection
-        async function checkAvailabilityAndProceed() {
-            // Validate guest info first
+        // Validate and proceed to rooms (similar to dashboard)
+        async function validateAndProceedToRooms() {
+            // First validate email
+            await validateGuestEmail();
+            
+            const emailError = document.getElementById('guestEmailError');
+            const emailField = document.getElementById('guestEmail');
             const firstName = document.getElementById('guestFirstName').value;
             const lastName = document.getElementById('guestLastName').value;
-            const email = document.getElementById('guestEmail').value;
-            const phone = document.getElementById('guestPhone').value;
+            const contact = document.getElementById('guestPhone').value;
+            
+            // Check if all required fields are filled
+            if (!firstName || !lastName || !emailField.value || !contact) {
+                showToast('Please fill in all required fields', 'error');
+                return;
+            }
+            
+            // Check if email has validation error
+            if (!emailValidated || !emailError.classList.contains('hidden')) {
+                showToast('Please fix the email error before proceeding', 'error');
+                return;
+            }
+            
+            // Validate phone number
+            if (!validatePhoneNumber()) {
+                showToast('Phone number must start with 09 and be 11 digits', 'error');
+                return;
+            }
+            
+            // Validate guest count
+            if (!validateGuestCount()) {
+                showToast('Please fix the guest count error', 'error');
+                return;
+            }
+            
+            // Validate dates
             const checkIn = document.getElementById('checkInDate').value;
             const checkOut = document.getElementById('checkOutDate').value;
-            const numGuests = document.getElementById('numGuests').value;
-            const numRooms = document.getElementById('numRooms').value;
             
-            // Basic validation
-            if (!firstName || !lastName || !email || !phone || !checkIn || !checkOut) {
-                showToast('Please fill in all required fields', 'error');
+            if (!checkIn || !checkOut) {
+                showToast('Please select check-in and check-out dates', 'error');
                 return;
             }
             
@@ -1038,12 +1182,21 @@
                 return;
             }
             
-            // Validate email
-            const emailValid = await validateGuestEmail();
-            if (!emailValid) {
-                showToast('Please fix the email error before proceeding', 'error');
-                return;
-            }
+            // All good, proceed to check availability
+            await checkAvailabilityAndProceed();
+        }
+
+        // Check availability and proceed to room selection
+        async function checkAvailabilityAndProceed() {
+            // Get form data
+            const firstName = document.getElementById('guestFirstName').value;
+            const lastName = document.getElementById('guestLastName').value;
+            const email = document.getElementById('guestEmail').value;
+            const phone = document.getElementById('guestPhone').value;
+            const checkIn = document.getElementById('checkInDate').value;
+            const checkOut = document.getElementById('checkOutDate').value;
+            const numGuests = document.getElementById('numGuests').value;
+            const numRooms = document.getElementById('numRooms').value;
             
             // Check availability
             showToast('Checking availability...', 'info');
@@ -1364,97 +1517,134 @@
             `;
         }
 
-        // In your blade file, update the completeBooking function:
-async function completeBooking() {
-    // Validate terms agreement
-    if (!document.getElementById('agreeTerms').checked) {
-        showToast('Please agree to the terms and conditions', 'error');
-        return;
-    }
-    
-    const paymentMethod = document.querySelector('input[name="paymentMethod"]:checked').value;
-    
-    // Step 1: Prepare booking (create temp session)
-    showToast('Preparing your booking...', 'info');
-    
-    try {
-        const prepareResponse = await fetch('/hotel/booking/prepare', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-            },
-            body: JSON.stringify({
-                room_type_id: selectedRoomTypeId,
-                check_in_date: bookingData.check_in_date,
-                check_out_date: bookingData.check_out_date,
-                num_rooms: selectedRooms.length,
-                num_guests: bookingData.num_guests
-            })
-        });
-        
-        const prepareResult = await prepareResponse.json();
-        
-        if (prepareResult.success) {
-            tempReference = prepareResult.temp_reference;
-            
-            // Step 2: Confirm booking with guest details
-            showToast('Creating your reservation...', 'info');
-            
-            const confirmResponse = await fetch('/hotel/booking/confirm', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-                },
-                body: JSON.stringify({
-                    first_name: bookingData.first_name,
-                    last_name: bookingData.last_name,
-                    email: bookingData.email,
-                    contact_number: bookingData.contact_number,
-                    special_requests: bookingData.special_requests,
-                    payment_method: paymentMethod,
-                    temp_reference: tempReference
-                })
-            });
-            
-            const confirmResult = await confirmResponse.json();
-            
-            if (confirmResult.success) {
-                if (paymentMethod === 'online' && confirmResult.payment_url) {
-                    // Redirect to Stripe for online payment
-                    showToast('Redirecting to payment...', 'info');
-                    setTimeout(() => {
-                        // Direct redirect to Stripe checkout
-                        window.location.href = confirmResult.payment_url;
-                    }, 1000);
-                } else {
-                    // Show success for credit card payment
-                    showSuccessModal(confirmResult);
-                }
-            } else {
-                showToast('Booking failed: ' + (confirmResult.message || 'Unknown error'), 'error');
+        // Complete booking
+        async function completeBooking() {
+            // Validate terms agreement
+            if (!document.getElementById('agreeTerms').checked) {
+                showToast('Please agree to the terms and conditions', 'error');
+                return;
             }
-        } else {
-            showToast('Preparation failed: ' + (prepareResult.message || 'Unknown error'), 'error');
+            
+            const paymentMethod = document.querySelector('input[name="paymentMethod"]:checked')?.value;
+            
+            if (!paymentMethod) {
+                showToast('Please select a payment method', 'error');
+                return;
+            }
+            
+            // Step 1: Prepare booking (create temp session)
+            showToast('Preparing your booking...', 'info');
+            
+            try {
+                const prepareResponse = await fetch('/hotel/booking/prepare', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+                    },
+                    body: JSON.stringify({
+                        room_type_id: selectedRoomTypeId,
+                        check_in_date: bookingData.check_in_date,
+                        check_out_date: bookingData.check_out_date,
+                        num_rooms: selectedRooms.length,
+                        num_guests: bookingData.num_guests
+                    })
+                });
+                
+                const prepareResult = await prepareResponse.json();
+                
+                if (prepareResult.success) {
+                    tempReference = prepareResult.temp_reference;
+                    
+                    // Step 2: Confirm booking with guest details
+                    showToast('Creating your reservation...', 'info');
+                    
+                    const confirmResponse = await fetch('/hotel/booking/confirm', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+                        },
+                        body: JSON.stringify({
+                            first_name: bookingData.first_name,
+                            last_name: bookingData.last_name,
+                            email: bookingData.email,
+                            contact_number: bookingData.contact_number,
+                            special_requests: bookingData.special_requests,
+                            payment_method: paymentMethod,
+                            temp_reference: tempReference
+                        })
+                    });
+                    
+                    const confirmResult = await confirmResponse.json();
+                    
+                    if (confirmResult.success) {
+                        if (paymentMethod === 'online' && confirmResult.payment_url) {
+                            // Redirect to Stripe for online payment
+                            showToast('Redirecting to payment...', 'info');
+                            setTimeout(() => {
+                                // Direct redirect to Stripe checkout
+                                window.location.href = confirmResult.payment_url;
+                            }, 1000);
+                        } else {
+                            // Show success for credit card payment
+                            showSuccessModal(confirmResult);
+                        }
+                    } else {
+                        showToast('Booking failed: ' + (confirmResult.message || 'Unknown error'), 'error');
+                    }
+                } else {
+                    showToast('Preparation failed: ' + (prepareResult.message || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                console.error('Booking error:', error);
+                showToast('Booking failed. Please try again.', 'error');
+            }
         }
-    } catch (error) {
-        console.error('Booking error:', error);
-        showToast('Booking failed. Please try again.', 'error');
-    }
-}
 
-// Also update the showSuccessModal function:
-function showSuccessModal(result) {
-    document.getElementById('successRef').textContent = result.booking_reference || result.reservation_id;
-    document.getElementById('successTotal').textContent = `₱${bookingData.total_amount.toLocaleString()}`;
-    
-    closeAllModals();
-    document.getElementById('successModal').classList.remove('hidden');
-    
-    // If it's an online payment, the user will be redirected to Stripe
-    // If it's credit card, they stay on the success modal
-}
+        // Show success modal
+        function showSuccessModal(result) {
+            document.getElementById('successRef').textContent = result.booking_reference || result.reservation_id;
+            document.getElementById('successTotal').textContent = `₱${bookingData.total_amount.toLocaleString()}`;
+            
+            closeAllModals();
+            document.getElementById('successModal').classList.remove('hidden');
+            
+            // Reset form for next booking
+            resetBookingForm();
+        }
+
+        // Reset booking form
+        function resetBookingForm() {
+            selectedRoomTypeId = null;
+            selectedRoomTypeCapacity = null;
+            selectedRooms = [];
+            bookingData = {};
+            tempReference = null;
+            maxRoomsToSelect = 1;
+            availableRoomsData = [];
+            emailValidated = false;
+            
+            // Clear form fields
+            document.getElementById('guestFirstName').value = '';
+            document.getElementById('guestLastName').value = '';
+            document.getElementById('guestEmail').value = '';
+            document.getElementById('guestPhone').value = '';
+            document.getElementById('numGuests').value = '1';
+            document.getElementById('numRooms').value = '1';
+            
+            // Reset validation displays
+            document.getElementById('guestEmailError').classList.add('hidden');
+            document.getElementById('guestEmailSuccess').classList.add('hidden');
+            document.getElementById('phone-error').classList.add('hidden');
+            document.getElementById('guests-error').classList.add('hidden');
+            document.getElementById('guests-max-info').classList.add('hidden');
+            
+            // Reset button states
+            document.getElementById('nextToRoomsBtn').disabled = true;
+            document.getElementById('nextToRoomsBtn').classList.remove('bg-blue-700', 'text-white', 'hover:bg-blue-800');
+            document.getElementById('nextToRoomsBtn').classList.add('bg-gray-300', 'text-gray-500', 'cursor-not-allowed');
+        }
 
         // Helper functions
         function isValidEmail(email) {
@@ -1490,6 +1680,20 @@ function showSuccessModal(result) {
                 }, 500);
             });
             
+            // Real-time phone validation
+            let phoneTimeout;
+            document.getElementById('guestPhone')?.addEventListener('input', function() {
+                clearTimeout(phoneTimeout);
+                phoneTimeout = setTimeout(() => {
+                    validatePhoneNumber();
+                }, 500);
+            });
+            
+            // Real-time guest count validation
+            document.getElementById('numGuests')?.addEventListener('input', function() {
+                validateGuestCount();
+            });
+            
             // Number of rooms input validation
             document.getElementById('numRooms')?.addEventListener('change', function() {
                 const numRooms = parseInt(this.value);
@@ -1499,6 +1703,7 @@ function showSuccessModal(result) {
                     this.value = 10;
                     showToast('Maximum 10 rooms per booking', 'info');
                 }
+                validateGuestCount(); // Revalidate as max rooms affects total capacity
             });
             
             // Intersection Observer for scroll animations

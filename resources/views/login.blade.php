@@ -23,13 +23,6 @@
                     {{ $errors->first() }}
                 </div>
             @endif
-            <div class="flex items-center justify-between text-sm">
-                <label class="flex items-center">
-                    <input type="checkbox" name="remember" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 mr-2">
-                    <span class="text-gray-700">Remember me</span>
-                </label>
-                <a href="#" class="text-blue-600 hover:text-blue-700">Forgot password?</a>
-            </div>
             <button type="submit" class="w-full bg-[#2c3e50] text-white py-2.5 rounded-md hover:bg-[#34495e] transition-colors font-medium">Sign In</button>
         </form>
         
