@@ -237,7 +237,7 @@ Route::middleware('auth')->group(function () {
             Route::post('/get-available-rooms', [ReservationController::class, 'getAvailableRooms'])->name('receptionist.reservations.get-available-rooms');
             Route::post('/hold-rooms', [ReservationController::class, 'holdRooms'])->name('receptionist.reservations.hold-rooms');
             Route::post('/check-availability', [ReservationController::class, 'checkAvailability'])->name('receptionist.reservations.check-availability');
-            Route::post('/check-email', [ReservationController::class, 'checkEmail'])->name('receptionist.reservations.check-email');
+            
         });
 
         Route::prefix('receptionist/rooms')->group(function () {
@@ -266,6 +266,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/receptionist/report', [ReportController::class, 'index'])->name('receptionist.report');
         Route::get('/receptionist/Guest-Checkin', [GuestCheckController::class, 'index'])->name('receptionist.checkin');
     });
+    Route::post('/check-email', [ReservationController::class, 'checkEmail'])->name('receptionist.reservations.check-email');
 });
 
 // =========================================================================

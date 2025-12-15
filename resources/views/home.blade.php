@@ -555,18 +555,21 @@
                         <div>
                             <label class="block text-xs sm:text-sm font-medium mb-1">Number of Rooms *</label>
                             <input type="number" id="numRooms" name="num_rooms" min="1" max="5" value="1"
-                                   class="w-full px-3 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" required>
+                                   class="w-full px-3 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+                                   required
+                                   oninput="updateGuestCapacity()">
                         </div>
                         
                         <div>
                             <label class="block text-xs sm:text-sm font-medium mb-1">Number of Guests *</label>
-                            <input type="number" id="numGuests" name="num_guests" min="1" max="8" value="1"
+                            <input type="number" id="numGuests" name="num_guests" min="1" value="1"
                                    class="w-full px-3 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                    oninput="validateGuestCount()"
                                    required>
                             <div id="guests-error" class="text-red-500 text-xs mt-1 hidden"></div>
                             <div id="guests-max-info" class="text-xs text-gray-500 mt-1 hidden">
-                                Maximum <span id="max-guests-display"></span> guests allowed for selected room type
+                                Maximum <span id="max-guests-display"></span> guests allowed for 
+                                <span id="rooms-count">1</span> <span id="room-text">room</span>
                             </div>
                         </div>
                     </div>
@@ -580,7 +583,7 @@
                 <div class="flex justify-end pt-3 sm:pt-4">
                     <button id="nextToRoomsBtn" onclick="validateAndProceedToRooms()" 
                             class="px-4 sm:px-6 py-2 text-sm sm:text-base bg-gray-300 text-gray-500 rounded-lg cursor-not-allowed" disabled>
-                        Next: Select Rooms
+                        Next: Select <span id="rooms-count-text">1</span> Room<span id="rooms-plural" class="hidden">s</span>
                     </button>
                 </div>
             </div>
@@ -891,15 +894,121 @@
             bookingData.room_type_price = parseFloat(roomTypePrice);
             bookingData.room_type_capacity = roomCapacity;
             
-            // Update max guests display
-            document.getElementById('max-guests-display').textContent = roomCapacity;
-            document.getElementById('guests-max-info').classList.remove('hidden');
+            // Reset number of rooms to 1
+            document.getElementById('numRooms').value = 1;
             
             // Show guest + dates modal
             showGuestDatesModal();
             
-            // Validate guest count initially
+            // Validate guest count initially (will calculate with 1 room)
+            updateGuestCapacity();
+        }
+
+        // Update guest capacity display when number of rooms changes
+        function updateGuestCapacity() {
+            const numRoomsInput = document.getElementById('numRooms');
+            const numRooms = parseInt(numRoomsInput.value) || 1;
+            
+            // Validate room count range
+            if (numRooms < 1) {
+                numRoomsInput.value = 1;
+            } else if (numRooms > 10) {
+                numRoomsInput.value = 10;
+                showToast('Maximum 10 rooms per booking', 'info');
+            }
+            
+            // Calculate maximum allowed guests (room capacity × number of rooms)
+            const maxAllowedGuests = selectedRoomTypeCapacity * numRooms;
+            
+            // Update displays
+            document.getElementById('max-guests-display').textContent = maxAllowedGuests;
+            document.getElementById('rooms-count').textContent = numRooms;
+            document.getElementById('rooms-count-text').textContent = numRooms;
+            
+            // Update room text (singular/plural)
+            const roomText = document.getElementById('room-text');
+            if (numRooms > 1) {
+                document.getElementById('rooms-plural').classList.remove('hidden');
+                roomText.textContent = 'rooms';
+            } else {
+                document.getElementById('rooms-plural').classList.add('hidden');
+                roomText.textContent = 'room';
+            }
+            
+            // Show/hide the capacity info
+            document.getElementById('guests-max-info').classList.remove('hidden');
+            
+            // Auto-update max attribute on guests input
+            const guestsInput = document.getElementById('numGuests');
+            guestsInput.max = maxAllowedGuests;
+            
+            // Update placeholder to show new max
+            guestsInput.placeholder = `1-${maxAllowedGuests} guests`;
+            
+            // Revalidate guest count
             validateGuestCount();
+        }
+
+        // Guest count validation with room multiplier
+        function validateGuestCount() {
+            const guestsInput = document.getElementById('numGuests');
+            const guestsError = document.getElementById('guests-error');
+            const nextButton = document.getElementById('nextToRoomsBtn');
+            const numRoomsInput = document.getElementById('numRooms');
+            const guests = parseInt(guestsInput.value);
+            const numRooms = parseInt(numRoomsInput.value) || 1;
+            
+            // Clear previous states
+            guestsError.textContent = '';
+            guestsError.classList.add('hidden');
+            guestsInput.classList.remove('border-red-500', 'border-green-500');
+            
+            // Disable next button by default
+            nextButton.disabled = true;
+            nextButton.classList.remove('bg-blue-700', 'text-white', 'hover:bg-blue-800');
+            nextButton.classList.add('bg-gray-300', 'text-gray-500', 'cursor-not-allowed');
+            
+            // Check if empty
+            if (!guests || isNaN(guests)) {
+                guestsError.textContent = 'Number of guests is required';
+                guestsError.classList.remove('hidden');
+                guestsInput.classList.add('border-red-500');
+                return false;
+            }
+            
+            // Calculate maximum allowed guests (room capacity × number of rooms)
+            const maxAllowedGuests = selectedRoomTypeCapacity * numRooms;
+            
+            // Check if within range (1 to multiplied capacity)
+            if (guests < 1) {
+                guestsError.textContent = 'Number of guests must be at least 1';
+                guestsError.classList.remove('hidden');
+                guestsInput.classList.add('border-red-500');
+                return false;
+            }
+            
+            if (guests > maxAllowedGuests) {
+                guestsError.textContent = `Maximum ${maxAllowedGuests} guests for ${numRooms} ${numRooms === 1 ? 'room' : 'rooms'}`;
+                guestsError.classList.remove('hidden');
+                guestsInput.classList.add('border-red-500');
+                return false;
+            }
+            
+            // If valid, show green border and enable button
+            guestsInput.classList.add('border-green-500');
+            
+            // Only enable button if all other validations pass
+            const phoneValid = validatePhoneNumber();
+            const emailField = document.getElementById('guestEmail');
+            const email = emailField.value;
+            
+            if (phoneValid && email && emailValidated) {
+                nextButton.disabled = false;
+                nextButton.classList.remove('bg-gray-300', 'text-gray-500', 'cursor-not-allowed');
+                nextButton.classList.add('bg-blue-700', 'text-white', 'hover:bg-blue-800');
+            }
+            
+            return true;
         }
 
         // Modal functions
@@ -1030,56 +1139,6 @@
             }
         }
 
-        // Guest count validation (similar to dashboard)
-        function validateGuestCount() {
-            const guestsInput = document.getElementById('numGuests');
-            const guestsError = document.getElementById('guests-error');
-            const nextButton = document.getElementById('nextToRoomsBtn');
-            const guests = parseInt(guestsInput.value);
-            
-            // Clear previous states
-            guestsError.textContent = '';
-            guestsError.classList.add('hidden');
-            guestsInput.classList.remove('border-red-500', 'border-green-500');
-            
-            // Disable next button by default
-            nextButton.disabled = true;
-            nextButton.classList.remove('bg-blue-700', 'text-white', 'hover:bg-blue-800');
-            nextButton.classList.add('bg-gray-300', 'text-gray-500', 'cursor-not-allowed');
-            
-            // Check if empty
-            if (!guests || isNaN(guests)) {
-                guestsError.textContent = 'Number of guests is required';
-                guestsError.classList.remove('hidden');
-                guestsInput.classList.add('border-red-500');
-                return false;
-            }
-            
-            // Check if within range (1 to room capacity)
-            if (guests < 1 || guests > selectedRoomTypeCapacity) {
-                guestsError.textContent = `Number of guests must be between 1 and ${selectedRoomTypeCapacity} for this room type`;
-                guestsError.classList.remove('hidden');
-                guestsInput.classList.add('border-red-500');
-                return false;
-            }
-            
-            // If valid, show green border and enable button
-            guestsInput.classList.add('border-green-500');
-            
-            // Only enable button if all other validations pass
-            const phoneValid = validatePhoneNumber();
-            const emailField = document.getElementById('guestEmail');
-            const email = emailField.value;
-            
-            if (phoneValid && email && emailValidated) {
-                nextButton.disabled = false;
-                nextButton.classList.remove('bg-gray-300', 'text-gray-500', 'cursor-not-allowed');
-                nextButton.classList.add('bg-blue-700', 'text-white', 'hover:bg-blue-800');
-            }
-            
-            return true;
-        }
-
         // Simple phone number validation
         function validatePhoneNumber() {
             const phoneInput = document.getElementById('guestPhone');
@@ -1143,6 +1202,7 @@
             const firstName = document.getElementById('guestFirstName').value;
             const lastName = document.getElementById('guestLastName').value;
             const contact = document.getElementById('guestPhone').value;
+            const numRooms = document.getElementById('numRooms').value;
             
             // Check if all required fields are filled
             if (!firstName || !lastName || !emailField.value || !contact) {
@@ -1199,7 +1259,7 @@
             const numRooms = document.getElementById('numRooms').value;
             
             // Check availability
-            showToast('Checking availability...', 'info');
+            showToast(`Checking availability for ${numRooms} room${numRooms > 1 ? 's' : ''}...`, 'info');
             
             try {
                 const response = await fetch('/hotel/check-availability', {
@@ -1695,15 +1755,8 @@
             });
             
             // Number of rooms input validation
-            document.getElementById('numRooms')?.addEventListener('change', function() {
-                const numRooms = parseInt(this.value);
-                if (numRooms < 1) {
-                    this.value = 1;
-                } else if (numRooms > 10) {
-                    this.value = 10;
-                    showToast('Maximum 10 rooms per booking', 'info');
-                }
-                validateGuestCount(); // Revalidate as max rooms affects total capacity
+            document.getElementById('numRooms')?.addEventListener('input', function() {
+                updateGuestCapacity();
             });
             
             // Intersection Observer for scroll animations
