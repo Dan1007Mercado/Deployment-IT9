@@ -1094,7 +1094,7 @@
             }
             
             try {
-                const response = await fetch('/reservations/check-email', {
+                const response = await fetch('/check-email', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',

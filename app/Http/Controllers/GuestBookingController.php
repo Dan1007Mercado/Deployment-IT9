@@ -50,6 +50,86 @@ class GuestBookingController extends Controller
         return $this->home();
     }
 
+    // ADD THIS EMAIL CHECK METHOD
+    public function checkEmail(Request $request)
+    {
+        try {
+            Log::info('Guest email check request', $request->only(['email', 'first_name', 'last_name']));
+            
+            $request->validate([
+                'email' => 'required|email|max:150',
+                'first_name' => 'nullable|string|max:100',
+                'last_name' => 'nullable|string|max:100'
+            ]);
+
+            $email = $request->email;
+            $firstName = $request->first_name;
+            $lastName = $request->last_name;
+
+            // Check if email exists in guests table
+            $guest = Guest::where('email', $email)->first();
+
+            if (!$guest) {
+                // New guest - email is available
+                Log::info('Email is available for new guest: ' . $email);
+                return response()->json([
+                    'exists' => false,
+                    'conflict' => false,
+                    'guest_name' => null,
+                    'message' => 'Email is available'
+                ]);
+            }
+
+            // Email exists - check for name conflicts
+            Log::info('Email exists for guest ID: ' . $guest->guest_id . ' - ' . $guest->first_name . ' ' . $guest->last_name);
+            
+            $nameConflict = false;
+            $errorMessage = null;
+            
+            if ($firstName && $lastName) {
+                // Check if the name matches the existing guest
+                $nameConflict = strtolower($guest->first_name) !== strtolower($firstName) || 
+                               strtolower($guest->last_name) !== strtolower($lastName);
+                
+                if ($nameConflict) {
+                    $errorMessage = 'Email already registered to ' . $guest->first_name . ' ' . $guest->last_name;
+                    Log::warning('Name conflict detected: ' . $errorMessage);
+                }
+            }
+
+            if ($nameConflict) {
+                return response()->json([
+                    'exists' => true,
+                    'conflict' => true,
+                    'error_message' => $errorMessage,
+                    'guest_name' => $guest->first_name . ' ' . $guest->last_name
+                ]);
+            }
+
+            // Existing guest with matching name (or no name provided)
+            Log::info('Email belongs to existing guest with matching name: ' . $guest->first_name . ' ' . $guest->last_name);
+            return response()->json([
+                'exists' => true,
+                'conflict' => false,
+                'guest_name' => $guest->first_name . ' ' . $guest->last_name,
+                'message' => 'Welcome back ' . $guest->first_name . '!'
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Guest email check error:', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
+            
+            return response()->json([
+                'exists' => false,
+                'conflict' => false,
+                'message' => 'Email validation failed. Please try again.'
+            ], 500);
+        }
+    }
+
     public function checkAvailability(Request $request)
     {
         try {

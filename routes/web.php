@@ -29,6 +29,9 @@ Route::get('/', function () {
 
 Route::get('/hotel-website', [GuestBookingController::class, 'home'])->name('guest.home.page');
 
+// PUBLIC EMAIL VALIDATION ROUTE - FIXED FOR RENDER
+Route::post('/check-email', [ReservationController::class, 'checkEmail'])->name('check.email.public');
+
 // Stripe Payment Callback Routes
 Route::prefix('payments')->group(function () {
     Route::get('/qr-code-display', function(Request $request) {
@@ -88,6 +91,8 @@ Route::prefix('hotel')->group(function () {
     Route::get('/booking/success/{reservation}', [GuestBookingController::class, 'bookingSuccess'])->name('guest.booking.success');
     Route::get('/booking/cancel/{reservation}', [GuestBookingController::class, 'bookingCancel'])->name('guest.booking.cancel');
     Route::get('/booking/check-payment-status', [GuestBookingController::class, 'checkPaymentStatus'])->name('guest.booking.check-payment-status');
+    // Public email check for hotel website
+    Route::post('/check-email', [GuestBookingController::class, 'checkEmail'])->name('guest.check-email');
 });
 
 // =========================================================================
@@ -162,6 +167,8 @@ Route::middleware('auth')->group(function () {
         Route::post('/available-rooms', [ReservationController::class, 'getAvailableRooms'])->name('reservations.available-rooms');
         Route::post('/hold-rooms', [ReservationController::class, 'holdRooms'])->name('reservations.hold-rooms');
         Route::post('/check-availability', [ReservationController::class, 'checkAvailability'])->name('reservations.check-availability');
+        
+        // PROTECTED EMAIL CHECK (for staff/admin only)
         Route::post('/check-email', [ReservationController::class, 'checkEmail'])->name('reservations.check-email');
         
         // Redirect
@@ -268,7 +275,7 @@ Route::middleware('auth')->group(function () {
     });
     
 });
-Route::post('/check-email', [ReservationController::class, 'checkEmail'])->name('receptionist.reservations.check-email');
+
 // =========================================================================
 // PUBLIC GUEST BOOKING MODAL AJAX
 // =========================================================================
