@@ -266,9 +266,9 @@ Route::middleware('auth')->group(function () {
         Route::get('/receptionist/report', [ReportController::class, 'index'])->name('receptionist.report');
         Route::get('/receptionist/Guest-Checkin', [GuestCheckController::class, 'index'])->name('receptionist.checkin');
     });
-    Route::post('/check-email', [ReservationController::class, 'checkEmail'])->name('receptionist.reservations.check-email');
+    
 });
-
+Route::post('/check-email', [ReservationController::class, 'checkEmail'])->name('receptionist.reservations.check-email');
 // =========================================================================
 // PUBLIC GUEST BOOKING MODAL AJAX
 // =========================================================================
