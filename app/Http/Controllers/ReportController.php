@@ -2,10 +2,9 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Reservation;
+use App\Models\Report;
 use App\Models\Payment;
 use App\Models\Booking;
-use App\Models\Report;
 use App\Models\Room;
 use App\Models\Guest;
 use App\Models\Sale;
@@ -14,6 +13,8 @@ use Illuminate\Http\Request;
 use Carbon\Carbon;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class ReportController extends Controller
 {
@@ -50,12 +51,13 @@ class ReportController extends Controller
             ->where('payment_status', 'completed')
             ->avg('amount') ?? 0;
 
-        // Recent reports with PAGINATION (10 per page)
+        // Recent reports with pagination
         try {
-            $recentReports = Report::latest()->paginate(10);
+            $recentReports = Report::with('generatedByUser')
+                ->latest()
+                ->paginate(10);
         } catch (\Exception $e) {
-            // If Report model doesn't exist yet, use empty paginator
-            $recentReports = collect([])->paginate(10);
+            $recentReports = collect([]);
         }
 
         return view('reports', [
@@ -96,7 +98,7 @@ class ReportController extends Controller
             // Generate report data based on type
             $reportData = $this->generateReportData($reportType, $startDate, $endDate);
             
-            // Generate PDF with UTF-8 encoding
+            // Generate PDF
             $pdf = Pdf::loadView('reports.pdf', [
                 'reportType' => $reportType,
                 'reportName' => $this->getReportName($reportType),
@@ -106,35 +108,40 @@ class ReportController extends Controller
                 'logoPath' => $this->getHotelLogoPath()
             ])->setOption('defaultFont', 'DejaVu Sans');
             
-            // Set paper size and orientation
             $pdf->setPaper('A4', 'portrait');
-            
-            // Get PDF content and encode as Base64
             $pdfContent = $pdf->output();
-            $encodedContent = base64_encode($pdfContent);
-            $fileSize = strlen($pdfContent); // Use original PDF size, not encoded
             
-            // Generate filename for reference
-            $filename = 'report_' . str_replace(' ', '_', strtolower($documentName)) . '_' . time() . '.pdf';
+            // Upload to S3
+            $cleanName = Str::slug($documentName);
+            $dateRange = $startDate->format('Y-m-d') . '_to_' . $endDate->format('Y-m-d');
+            $uniqueId = Str::random(8);
+            $filename = "{$cleanName}_{$dateRange}_{$uniqueId}.pdf";
             
-            // Save report record to database
+            // S3 path: reports/[type]/year/month/day/filename.pdf
+            $s3Path = 'reports/' . $reportType . '/' . date('Y/m/d/') . $filename;
+            
+            // Upload to S3
+            Storage::disk('s3')->put($s3Path, $pdfContent, [
+                'ContentType' => 'application/pdf',
+                'ContentDisposition' => 'inline; filename="' . $filename . '"',
+            ]);
+            
+            // Save report record to database (NO file_content)
             $report = Report::create([
                 'name' => $documentName,
                 'type' => $reportType,
                 'start_date' => $startDate,
                 'end_date' => $endDate,
-                'file_path' => 'database://' . $filename, // Mark as stored in database
-                'file_content' => ['data' => $encodedContent],
-                'file_size' => $fileSize,
+                'file_path' => $s3Path,
+                'file_size' => strlen($pdfContent),
                 'mime_type' => 'application/pdf',
                 'generated_by' => auth()->id(),
             ]);
             
-            // Return success with download option
             return back()->with([
-                'success' => 'Report generated successfully!',
-                'download_url' => route('report.download', $report->id),
-                'view_url' => route('report.view', $report->id),
+                'success' => 'Report generated and uploaded to S3 successfully!',
+                'download_url' => route('reports.download', $report->id),
+                'view_url' => route('reports.view', $report->id),
                 'report_id' => $report->id
             ]);
             
@@ -152,26 +159,16 @@ class ReportController extends Controller
         try {
             $report = Report::findOrFail($id);
             
-            // First try to get from database storage
-            if ($report->hasFileContent()) {
-                $pdfContent = $report->getPdfContent();
-                $filename = $this->generateDownloadFilename($report);
-                
-                return response()->streamDownload(function () use ($pdfContent) {
-                    echo $pdfContent;
-                }, $filename, [
-                    'Content-Type' => 'application/pdf',
-                    'Content-Disposition' => 'attachment; filename="' . $filename . '"',
-                    'Content-Length' => strlen($pdfContent),
-                ]);
+            // Check if file exists in S3
+            if (!$report->file_path || !Storage::disk('s3')->exists($report->file_path)) {
+                throw new \Exception('Report file not found in S3.');
             }
             
-            // Fallback to old file_path method (if you have existing reports)
-            if ($report->file_path && Storage::exists($report->file_path)) {
-                return Storage::download($report->file_path, $this->generateDownloadFilename($report));
-            }
+            // Generate temporary URL (valid for 10 minutes)
+            $temporaryUrl = Storage::disk('s3')->temporaryUrl($report->file_path, now()->addMinutes(10));
             
-            throw new \Exception('Report file not found. It may have been deleted.');
+            // Redirect to S3 URL
+            return redirect()->away($temporaryUrl);
             
         } catch (\Exception $e) {
             Log::error('Report download failed: ' . $e->getMessage());
@@ -184,26 +181,16 @@ class ReportController extends Controller
         try {
             $report = Report::findOrFail($id);
             
-            // First try to get from database storage
-            if ($report->hasFileContent()) {
-                $pdfContent = $report->getPdfContent();
-                
-                return response($pdfContent, 200, [
-                    'Content-Type' => 'application/pdf',
-                    'Content-Disposition' => 'inline; filename="' . $report->name . '.pdf"',
-                    'Content-Length' => strlen($pdfContent),
-                ]);
+            // Check if file exists in S3
+            if (!$report->file_path || !Storage::disk('s3')->exists($report->file_path)) {
+                throw new \Exception('Report file not found in S3.');
             }
             
-            // Fallback to old file_path method
-            if ($report->file_path && Storage::exists($report->file_path)) {
-                return response()->file(Storage::path($report->file_path), [
-                    'Content-Type' => 'application/pdf',
-                    'Content-Disposition' => 'inline; filename="' . $report->name . '.pdf"',
-                ]);
-            }
+            // Generate temporary URL (valid for 30 minutes for viewing)
+            $temporaryUrl = Storage::disk('s3')->temporaryUrl($report->file_path, now()->addMinutes(30));
             
-            throw new \Exception('Report file not found. It may have been deleted.');
+            // Redirect to S3 URL
+            return redirect()->away($temporaryUrl);
             
         } catch (\Exception $e) {
             Log::error('Report view failed: ' . $e->getMessage());
@@ -211,7 +198,175 @@ class ReportController extends Controller
         }
     }
 
-    // PRIVATE HELPER METHODS
+    public function destroy($id)
+    {
+        try {
+            $report = Report::findOrFail($id);
+            
+            // Delete from S3
+            if ($report->file_path && Storage::disk('s3')->exists($report->file_path)) {
+                Storage::disk('s3')->delete($report->file_path);
+            }
+            
+            // Delete from database
+            $report->delete();
+            
+            return redirect()->route('reports.index')->with('success', 'Report deleted successfully');
+            
+        } catch (\Exception $e) {
+            Log::error('Report deletion failed: ' . $e->getMessage());
+            return back()->with('error', 'Failed to delete report: ' . $e->getMessage());
+        }
+    }
+
+    public function quickReport(Request $request, $type)
+    {
+        try {
+            $startDate = Carbon::now()->subDays(30);
+            $endDate = Carbon::now();
+            $documentName = $this->getReportName($type) . ' - ' . now()->format('Y-m-d');
+            
+            $reportData = $this->generateReportData($type, $startDate, $endDate);
+            
+            $pdf = Pdf::loadView('reports.pdf', [
+                'reportType' => $type,
+                'reportName' => $this->getReportName($type),
+                'startDate' => $startDate,
+                'endDate' => $endDate,
+                'reportData' => $reportData,
+                'logoPath' => $this->getHotelLogoPath()
+            ]);
+            
+            $pdfContent = $pdf->output();
+            
+            // Upload to S3
+            $cleanName = Str::slug($documentName);
+            $dateRange = $startDate->format('Y-m-d') . '_to_' . $endDate->format('Y-m-d');
+            $uniqueId = Str::random(8);
+            $filename = "{$cleanName}_{$dateRange}_{$uniqueId}.pdf";
+            $s3Path = 'reports/' . $type . '/' . date('Y/m/d/') . $filename;
+            
+            Storage::disk('s3')->put($s3Path, $pdfContent);
+            
+            $report = Report::create([
+                'name' => $documentName,
+                'type' => $type,
+                'start_date' => $startDate,
+                'end_date' => $endDate,
+                'file_path' => $s3Path,
+                'file_size' => strlen($pdfContent),
+                'mime_type' => 'application/pdf',
+                'generated_by' => auth()->id(),
+            ]);
+            
+            return response()->json([
+                'success' => true,
+                'report_id' => $report->id,
+                'download_url' => route('reports.download', $report->id),
+                'view_url' => route('reports.view', $report->id)
+            ]);
+            
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    // Preview report (for AJAX)
+    public function previewReport(Request $request)
+    {
+        try {
+            $request->validate([
+                'report_type' => 'required|string',
+                'start_date' => 'required|date',
+                'end_date' => 'required|date|after_or_equal:start_date',
+            ]);
+            
+            $startDate = Carbon::parse($request->start_date);
+            $endDate = Carbon::parse($request->end_date);
+            $reportType = $request->report_type;
+            
+            $reportData = $this->generateReportData($reportType, $startDate, $endDate);
+            
+            return response()->json([
+                'success' => true,
+                'preview' => view('reports.preview', [
+                    'reportType' => $reportType,
+                    'startDate' => $startDate,
+                    'endDate' => $endDate,
+                    'reportData' => $reportData
+                ])->render()
+            ]);
+            
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    // Async report generation
+    public function generateAsync(Request $request)
+    {
+        return $this->generate($request);
+    }
+
+    // Check generation status
+    public function checkGenerationStatus($jobId)
+    {
+        return response()->json([
+            'status' => 'completed',
+            'report_id' => $jobId
+        ]);
+    }
+
+    // List reports API
+    public function listReports(Request $request)
+    {
+        $reports = Report::with('generatedByUser')
+            ->when($request->type, function($q, $type) {
+                return $q->where('type', $type);
+            })
+            ->when($request->from, function($q, $from) {
+                return $q->whereDate('created_at', '>=', Carbon::parse($from));
+            })
+            ->when($request->to, function($q, $to) {
+                return $q->whereDate('created_at', '<=', Carbon::parse($to));
+            })
+            ->latest()
+            ->paginate($request->per_page ?? 20);
+            
+        return response()->json($reports);
+    }
+
+    // Public view with token
+    public function publicView($id, $token)
+    {
+        try {
+            $report = Report::findOrFail($id);
+            
+            // You would need to add a share_token column and logic
+            // For now, redirect to regular view
+            return $this->view($id);
+            
+        } catch (\Exception $e) {
+            return view('errors.404');
+        }
+    }
+
+    // Public download with token
+    public function publicDownload($id, $token)
+    {
+        try {
+            $report = Report::findOrFail($id);
+            
+            // You would need to add a share_token column and logic
+            // For now, redirect to regular download
+            return $this->download($id);
+            
+        } catch (\Exception $e) {
+            return view('errors.404');
+        }
+    }
+
+    // ==================== PRIVATE HELPER METHODS ====================
 
     private function generateReportData($reportType, $startDate, $endDate)
     {
@@ -229,16 +384,13 @@ class ReportController extends Controller
 
     private function generateRevenueReport($startDate, $endDate)
     {
-        // Total revenue from completed payments
         $totalRevenue = Payment::whereBetween('payment_date', [$startDate, $endDate])
             ->where('payment_status', 'completed')
             ->sum('amount');
 
-        // Room revenue from sales table
         $roomRevenue = Sale::whereBetween('sale_date', [$startDate, $endDate])
             ->sum('room_revenue') ?? 0;
 
-        // Get daily revenue
         $dailyRevenue = [];
         $currentDate = $startDate->copy();
         
@@ -261,7 +413,6 @@ class ReportController extends Controller
             $currentDate->addDay();
         }
 
-        // Revenue by room type
         $roomTypes = RoomType::all();
         $revenueByRoomType = [];
         
@@ -282,7 +433,6 @@ class ReportController extends Controller
             ];
         }
 
-        // Calculate growth compared to previous period
         $daysDiff = $startDate->diffInDays($endDate);
         $previousStartDate = $startDate->copy()->subDays($daysDiff + 1);
         $previousEndDate = $startDate->copy()->subDay();
@@ -453,13 +603,5 @@ class ReportController extends Controller
         }
         
         return null;
-    }
-
-    private function generateDownloadFilename($report)
-    {
-        return 'Report_' . 
-               str_replace(' ', '_', $report->name) . '_' . 
-               $report->start_date->format('Y-m-d') . '_to_' . 
-               $report->end_date->format('Y-m-d') . '.pdf';
     }
 }
