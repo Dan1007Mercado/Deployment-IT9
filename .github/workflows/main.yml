@@ -31,9 +31,24 @@ jobs:
         run: |
           cp .env.example .env
           php artisan key:generate --no-interaction
-          
+
       - name: 📋 Configure testing environment
         run: |
+          # Verify APP_KEY was generated successfully
+          if ! grep -q "^APP_KEY=" .env; then
+            echo "❌ APP_KEY not found in .env file!"
+            exit 1
+          fi
+          
+          APP_KEY_VALUE=$(grep "^APP_KEY=" .env | cut -d'=' -f2-)
+          if [ -z "$APP_KEY_VALUE" ]; then
+            echo "❌ APP_KEY is empty!"
+            exit 1
+          fi
+          
+          echo "✅ APP_KEY verified: ${APP_KEY_VALUE:0:20}..."
+          
+          # Append testing configurations
           echo "APP_ENV=testing" >> .env
           echo "APP_DEBUG=true" >> .env
           echo "DB_CONNECTION=sqlite" >> .env
@@ -44,9 +59,10 @@ jobs:
           echo "MAIL_MAILER=array" >> .env
           echo "BROADCAST_DRIVER=log" >> .env
           
-          # Verify APP_KEY is set
-          echo "✅ APP_KEY is set to:"
-          grep APP_KEY .env || echo "❌ APP_KEY not found!"
+          # Final verification
+          echo ""
+          echo "📋 Final .env configuration:"
+          grep -E "^(APP_KEY|APP_ENV|DB_CONNECTION)" .env
 
       - name: 🔄 Clear and cache config
         run: |
@@ -115,7 +131,7 @@ jobs:
                     ./ deployment/
           cd deployment && tar -czf ../laravel-deploy.tar.gz .
 
-      - name: 🔑 Setup SSH
+      - name: �� Setup SSH
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
