@@ -299,33 +299,4 @@ jobs:
         if: success()
         run: echo "✅ Production deployment successful!"
 
-  cleanup-old-backups:
-    name: 🧹 Cleanup Old Backups
-    runs-on: ubuntu-latest
-    needs: [deploy-development, deploy-production]
-    if: always() && github.event_name == 'push'
-    steps:
-      - name: 🔑 Setup SSH
-        env:
-          SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
-          SSH_HOST: ${{ secrets.EC2_HOST }}
-          SSH_USER: ${{ secrets.EC2_USER }}
-        run: |
-          # Setup SSH
-          mkdir -p ~/.ssh
-          echo "$SSH_KEY" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          
-          # Add host to known_hosts
-          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
-          
-          # Run cleanup (non-critical, won't fail the workflow)
-          ssh "$SSH_USER@$SSH_HOST" '
-            if [ -d /var/www/backups ]; then
-              cd /var/www/backups
-              ls -t *.tar.gz 2>/dev/null | tail -n +6 | xargs -r rm
-              echo "✅ Cleaned up old backups (kept last 5)"
-            else
-              echo "No backups directory found, skipping cleanup"
-            fi
-          ' || echo "Cleanup skipped (non-critical)"
+  
