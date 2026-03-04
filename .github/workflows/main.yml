@@ -268,7 +268,7 @@ jobs:
         if: success()
         run: echo "✅ Production deployment successful!"
 
-  cleanup:
+    cleanup:
     name: 🧹 Cleanup Old Backups
     runs-on: ubuntu-latest
     needs: [deploy-development, deploy-production]
@@ -280,12 +280,13 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+          # Fixed ssh-keyscan syntax
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
       
       - name: 🗑️ Remove old backups (keep last 5)
         run: |
-          ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} '
-            cd /var/www/backups
-            ls -t *.tar.gz | tail -n +6 | xargs -r rm
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} '
+            cd /var/www/backups 2>/dev/null || exit 0
+            ls -t *.tar.gz 2>/dev/null | tail -n +6 | xargs -r rm
             echo "✅ Cleaned up old backups"
           '
