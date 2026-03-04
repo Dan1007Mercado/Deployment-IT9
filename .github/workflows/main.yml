@@ -26,14 +26,18 @@ jobs:
       - name: 📦 Install Composer dependencies
         run: composer install --no-progress --prefer-dist
 
-      - name: 📋 Copy .env and generate APP_KEY
+      - name: 📋 Setup environment
         run: |
           cp .env.example .env
           php artisan key:generate --no-interaction
+          
+          # Additional environment setup for testing
+          echo "APP_ENV=testing" >> .env
+          echo "DB_CONNECTION=sqlite" >> .env
+          echo "DB_DATABASE=:memory:" >> .env
 
       - name: ✅ Run Laravel tests
         run: php artisan test
-
 
   deploy:
     name: 🚀 Deploy to Production
@@ -113,6 +117,11 @@ jobs:
             php artisan down --retry=60 || true
 
             tar -xzf /tmp/laravel-deploy.tar.gz -C /var/www/laravel
+
+            # Generate key if not exists
+            if [ -z "$(grep "^APP_KEY=" .env)" ] || [ "$(grep "^APP_KEY=" .env)" = "APP_KEY=" ]; then
+              php artisan key:generate --force
+            fi
 
             composer install --no-dev --optimize-autoloader
 
