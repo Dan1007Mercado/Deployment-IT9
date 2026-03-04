@@ -1,0 +1,291 @@
+name: Deploy Laravel to AWS EC2
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    name: 🧪 Run Tests
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 🔧 Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: 8.3
+          extensions: mbstring, xml, bcmath, zip, curl, gd, mysql, pdo_mysql
+          coverage: none
+      
+      - name: 📋 Copy .env
+        run: cp .env.example .env
+      
+      - name: 📦 Install Composer dependencies
+        run: composer install --no-progress --no-suggest
+      
+      - name: 🔑 Generate key
+        run: php artisan key:generate
+      
+      - name: ✅ Run Laravel tests
+        run: php artisan test
+      
+      - name: 🔍 Run PHPStan (static analysis)
+        run: vendor/bin/phpstan analyse --memory-limit=2G || true
+
+  deploy-development:
+    name: 🚀 Deploy to Development
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 🔧 Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: 8.3
+      
+      - name: 📦 Install Composer dependencies
+        run: composer install --no-dev --optimize-autoloader
+      
+      - name: 🎨 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      
+      - name: 📦 Install NPM dependencies
+        run: npm ci
+      
+      - name: 🏗️ Build assets
+        run: npm run build
+      
+      - name: 📦 Create deployment package
+        run: |
+          mkdir -p deployment
+          rsync -av --exclude='.git' \
+                    --exclude='.github' \
+                    --exclude='node_modules' \
+                    --exclude='tests' \
+                    --exclude='.env' \
+                    --exclude='storage/logs/*' \
+                    --exclude='storage/framework/cache/*' \
+                    ./ deployment/
+          cd deployment && tar -czf ../laravel-deploy.tar.gz .
+      
+      - name: 🔑 Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+      
+      - name: 📤 Copy files to EC2
+        run: |
+          scp laravel-deploy.tar.gz ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/tmp/
+      
+      - name: 🔄 Deploy on EC2
+        run: |
+          ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} '
+            set -e
+            
+            # Go to application directory
+            cd /var/www/laravel
+            
+            # Put application in maintenance mode
+            php artisan down --retry=60 || true
+            
+            # Backup current version
+            timestamp=$(date +%Y%m%d_%H%M%S)
+            mkdir -p /var/www/backups
+            tar -czf /var/www/backups/laravel_backup_$timestamp.tar.gz --exclude=storage/logs --exclude=storage/framework/cache --exclude=node_modules .
+            
+            # Extract new files
+            sudo -u ubuntu tar -xzf /tmp/laravel-deploy.tar.gz -C /var/www/laravel
+            
+            # Install dependencies
+            composer install --no-dev --optimize-autoloader
+            
+            # Update .env with database credentials
+            sed -i "s|DB_PASSWORD=.*|DB_PASSWORD=${{ secrets.DB_PASSWORD }}|g" .env
+            sed -i "s|APP_URL=.*|APP_URL=http://${{ secrets.EC2_HOST }}|g" .env
+            
+            # Run migrations
+            php artisan migrate --force
+            
+            # Clear and cache
+            php artisan optimize:clear
+            php artisan config:cache
+            php artisan route:cache
+            php artisan view:cache
+            
+            # Set permissions
+            sudo chown -R www-data:www-data storage bootstrap/cache
+            sudo chmod -R 775 storage bootstrap/cache
+            
+            # Create storage link
+            php artisan storage:link || true
+            
+            # Exit maintenance mode
+            php artisan up
+            
+            # Clean up
+            rm /tmp/laravel-deploy.tar.gz
+            
+            echo "✅ Deployment completed at $(date)"
+          '
+      
+      - name: 💬 Notify success
+        if: success()
+        run: echo "✅ Development deployment successful!"
+
+  deploy-production:
+    name: 🚀 Deploy to Production
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 🔧 Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: 8.3
+      
+      - name: 📦 Install Composer dependencies
+        run: composer install --no-dev --optimize-autoloader
+      
+      - name: 🎨 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      
+      - name: 📦 Install NPM dependencies
+        run: npm ci
+      
+      - name: 🏗️ Build assets
+        run: npm run build
+      
+      - name: 📤 Upload assets to S3
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ap-southeast-1
+        run: |
+          aws s3 sync public/ s3://laravel-cloud-storage-hotel-1234/public/ --delete --exclude "index.php"
+          aws s3 sync public/build/ s3://laravel-cloud-storage-hotel-1234/build/ --delete
+      
+      - name: 📦 Create deployment package
+        run: |
+          mkdir -p deployment
+          rsync -av --exclude='.git' \
+                    --exclude='.github' \
+                    --exclude='node_modules' \
+                    --exclude='tests' \
+                    --exclude='.env' \
+                    --exclude='public/build' \
+                    --exclude='storage/logs/*' \
+                    --exclude='storage/framework/cache/*' \
+                    ./ deployment/
+          cd deployment && tar -czf ../laravel-deploy.tar.gz .
+      
+      - name: 🔑 Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+      
+      - name: 📤 Copy files to EC2
+        run: |
+          scp laravel-deploy.tar.gz ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/tmp/
+      
+      - name: 🔄 Deploy on EC2
+        run: |
+          ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} '
+            set -e
+            
+            cd /var/www/laravel
+            
+            # Maintenance mode
+            php artisan down --retry=60
+            
+            # Backup
+            timestamp=$(date +%Y%m%d_%H%M%S)
+            mkdir -p /var/www/backups
+            tar -czf /var/www/backups/laravel_backup_$timestamp.tar.gz --exclude=storage/logs --exclude=storage/framework/cache --exclude=node_modules .
+            
+            # Extract new files
+            sudo -u ubuntu tar -xzf /tmp/laravel-deploy.tar.gz -C /var/www/laravel
+            
+            # Install dependencies
+            composer install --no-dev --optimize-autoloader
+            
+            # Update .env
+            sed -i "s|DB_PASSWORD=.*|DB_PASSWORD=${{ secrets.DB_PASSWORD }}|g" .env
+            sed -i "s|APP_URL=.*|APP_URL=http://${{ secrets.EC2_HOST }}|g" .env
+            sed -i "s|AWS_ACCESS_KEY_ID=.*|AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}|g" .env
+            sed -i "s|AWS_SECRET_ACCESS_KEY=.*|AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}|g" .env
+            
+            # Run migrations
+            php artisan migrate --force
+            
+            # Clear and cache
+            php artisan optimize:clear
+            php artisan config:cache
+            php artisan route:cache
+            php artisan view:cache
+            
+            # Permissions
+            sudo chown -R www-data:www-data storage bootstrap/cache
+            sudo chmod -R 775 storage bootstrap/cache
+            
+            # Storage link
+            php artisan storage:link || true
+            
+            # Exit maintenance
+            php artisan up
+            
+            rm /tmp/laravel-deploy.tar.gz
+            echo "✅ Production deployment completed at $(date)"
+          '
+      
+      - name: 🏥 Health check
+        run: |
+          sleep 10
+          curl -f http://${{ secrets.EC2_HOST }}/health || exit 1
+      
+      - name: 💬 Notify success
+        if: success()
+        run: echo "✅ Production deployment successful!"
+
+  cleanup:
+    name: 🧹 Cleanup Old Backups
+    runs-on: ubuntu-latest
+    needs: [deploy-development, deploy-production]
+    if: always()
+    
+    steps:
+      - name: 🔑 Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+      
+      - name: 🗑️ Remove old backups (keep last 5)
+        run: |
+          ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} '
+            cd /var/www/backups
+            ls -t *.tar.gz | tail -n +6 | xargs -r rm
+            echo "✅ Cleaned up old backups"
+          '
