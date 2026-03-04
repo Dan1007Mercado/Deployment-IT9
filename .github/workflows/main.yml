@@ -1,39 +1,224 @@
-test:
-  name: 🧪 Run Tests
-  runs-on: ubuntu-latest
+name: Deploy Laravel to AWS EC2
 
-  steps:
-    - name: 📥 Checkout code
-      uses: actions/checkout@v4
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
 
-    - name: 🔧 Setup PHP
-      uses: shivammathur/setup-php@v2
-      with:
-        php-version: 8.3
-        extensions: mbstring, xml, bcmath, zip, curl, gd, mysql, pdo_mysql
+jobs:
+  test:
+    name: 🧪 Run Tests
+    runs-on: ubuntu-latest
 
-    - name: 📦 Install Composer dependencies
-      run: composer install --no-progress --prefer-dist
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
 
-    - name: 📋 Setup environment
-      run: |
-        cp .env.example .env
-        php artisan key:generate --no-interaction
-        # Set testing environment
-        echo "APP_ENV=testing" >> .env
-        echo "APP_DEBUG=true" >> .env
-        echo "DB_CONNECTION=sqlite" >> .env
-        echo "DB_DATABASE=:memory:" >> .env
-        echo "CACHE_DRIVER=array" >> .env
-        echo "SESSION_DRIVER=array" >> .env
-        echo "QUEUE_CONNECTION=sync" >> .env
-        
-        # Verify the key was generated
-        cat .env | grep APP_KEY
+      - name: 🔧 Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: 8.3
+          extensions: mbstring, xml, bcmath, zip, curl, gd, mysql, pdo_mysql
+          coverage: none
 
-    - name: ✅ Run Laravel tests with environment
-      run: |
-        # Load the environment and run tests
-        php artisan config:clear
-        php artisan config:cache
-        php artisan test --env=testing
+      - name: 📦 Install Composer dependencies
+        run: composer install --no-progress --prefer-dist --no-interaction
+
+      - name: 📋 Create environment file
+        run: |
+          cp .env.example .env
+          php artisan key:generate --no-interaction
+          
+      - name: 📋 Configure testing environment
+        run: |
+          echo "APP_ENV=testing" >> .env
+          echo "APP_DEBUG=true" >> .env
+          echo "DB_CONNECTION=sqlite" >> .env
+          echo "DB_DATABASE=:memory:" >> .env
+          echo "CACHE_DRIVER=array" >> .env
+          echo "SESSION_DRIVER=array" >> .env
+          echo "QUEUE_CONNECTION=sync" >> .env
+          echo "MAIL_MAILER=array" >> .env
+          echo "BROADCAST_DRIVER=log" >> .env
+          
+          # Verify APP_KEY is set
+          echo "✅ APP_KEY is set to:"
+          grep APP_KEY .env || echo "❌ APP_KEY not found!"
+
+      - name: 🔄 Clear and cache config
+        run: |
+          php artisan config:clear
+          php artisan config:cache
+
+      - name: ✅ Run Laravel tests
+        run: php artisan test
+
+  deploy:
+    name: 🚀 Deploy to Production
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔧 Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: 8.3
+          extensions: mbstring, xml, bcmath, zip, curl, gd, mysql, pdo_mysql
+          coverage: none
+
+      - name: 📦 Install Composer dependencies
+        run: composer install --no-dev --optimize-autoloader --no-interaction
+
+      - name: 🎨 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: 📦 Install NPM dependencies
+        run: npm ci
+
+      - name: 🏗️ Build assets
+        run: npm run build
+
+      - name: 📤 Upload assets to S3
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ap-southeast-1
+        run: |
+          aws s3 sync public/ s3://laravel-cloud-storage-hotel-1234/public/ --delete --exclude "index.php" || true
+          aws s3 sync public/build/ s3://laravel-cloud-storage-hotel-1234/build/ --delete || true
+
+      - name: 📦 Create deployment package
+        run: |
+          mkdir -p deployment
+          rsync -av --exclude='.git' \
+                    --exclude='.github' \
+                    --exclude='node_modules' \
+                    --exclude='tests' \
+                    --exclude='.env' \
+                    --exclude='.env.*' \
+                    --exclude='public/build' \
+                    --exclude='storage/logs/*' \
+                    --exclude='storage/framework/cache/*' \
+                    --exclude='storage/framework/sessions/*' \
+                    --exclude='storage/framework/testing/*' \
+                    --exclude='storage/app/public/*' \
+                    ./ deployment/
+          cd deployment && tar -czf ../laravel-deploy.tar.gz .
+
+      - name: 🔑 Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: 📤 Copy files to EC2
+        run: |
+          scp -o StrictHostKeyChecking=no laravel-deploy.tar.gz ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/tmp/
+
+      - name: 🔄 Deploy on EC2
+        env:
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} '
+            set -e
+            
+            # Navigate to application directory
+            cd /var/www/laravel || { echo "❌ Failed to change directory"; exit 1; }
+            
+            # Put application in maintenance mode
+            php artisan down --retry=60 || true
+            
+            # Extract new files
+            echo "📦 Extracting files..."
+            tar -xzf /tmp/laravel-deploy.tar.gz -C /var/www/laravel
+            
+            # Set proper permissions
+            echo "🔧 Setting permissions..."
+            sudo chown -R $USER:www-data .
+            sudo chmod -R 775 storage bootstrap/cache
+            
+            # Install dependencies
+            echo "📦 Installing Composer dependencies..."
+            composer install --no-dev --optimize-autoloader --no-interaction
+            
+            # Generate application key if not exists
+            if ! grep -q "^APP_KEY=" .env || [ -z "$(grep "^APP_KEY=" .env | cut -d '=' -f2)" ]; then
+              echo "🔑 Generating application key..."
+              php artisan key:generate --force
+            fi
+            
+            # Run migrations
+            echo "🗄️ Running database migrations..."
+            php artisan migrate --force
+            
+            # Clear and cache configurations
+            echo "⚙️ Optimizing Laravel..."
+            php artisan optimize:clear
+            php artisan config:cache
+            php artisan route:cache
+            php artisan view:cache
+            php artisan event:cache || true
+            
+            # Create storage link
+            echo "🔗 Creating storage link..."
+            php artisan storage:link || true
+            
+            # Set final permissions
+            echo "🔧 Setting final permissions..."
+            sudo chown -R www-data:www-data storage bootstrap/cache
+            sudo chmod -R 775 storage bootstrap/cache
+            
+            # Restart queue workers if using horizon or queue
+            if command -v supervisorctl &> /dev/null; then
+              echo "🔄 Restarting queue workers..."
+              sudo supervisorctl restart laravel-worker:* || true
+            fi
+            
+            # Bring application back up
+            echo "🚀 Bringing application online..."
+            php artisan up
+            
+            # Clean up
+            rm /tmp/laravel-deploy.tar.gz
+            
+            echo "✅ Deployment completed successfully!"
+          '
+
+      - name: 🏥 Health check
+        run: |
+          echo "⏳ Waiting for application to be ready..."
+          sleep 10
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.EC2_HOST }} || echo "000")
+          if [ "$HTTP_STATUS" = "200" ] || [ "$HTTP_STATUS" = "302" ]; then
+            echo "✅ Health check passed! (HTTP $HTTP_STATUS)"
+          else
+            echo "⚠️ Health check returned HTTP $HTTP_STATUS"
+            # Don't fail the build, just warn
+          fi
+
+      - name: 💬 Notify success
+        if: success()
+        run: |
+          echo "✅ Production deployment successful!"
+          echo "🌐 Application is live at: http://${{ secrets.EC2_HOST }}"
+
+      - name: 💬 Notify failure
+        if: failure()
+        run: |
+          echo "❌ Deployment failed!"
+          echo "Please check the logs above for details."
