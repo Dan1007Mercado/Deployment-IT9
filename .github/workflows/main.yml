@@ -23,14 +23,13 @@ jobs:
           php-version: 8.3
           extensions: mbstring, xml, bcmath, zip, curl, gd, mysql, pdo_mysql
 
-      - name: 📋 Copy .env
-        run: cp .env.example .env
+      - name: 📋 Copy .env and generate APP_KEY
+        run: |
+          cp .env.example .env
+          php artisan key:generate --no-interaction
 
       - name: 📦 Install Composer dependencies
         run: composer install --no-progress --prefer-dist
-
-      - name: 🔑 Generate key
-        run: php artisan key:generate
 
       - name: ✅ Run Laravel tests
         run: php artisan test
@@ -65,6 +64,15 @@ jobs:
       - name: 🏗️ Build assets
         run: npm run build
 
+      - name: 📤 Upload assets to S3
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ap-southeast-1
+        run: |
+          aws s3 sync public/ s3://laravel-cloud-storage-hotel-1234/public/ --delete --exclude "index.php" || true
+          aws s3 sync public/build/ s3://laravel-cloud-storage-hotel-1234/build/ --delete || true
+
       - name: 📦 Create deployment package
         run: |
           mkdir -p deployment
@@ -88,10 +96,15 @@ jobs:
 
       - name: 📤 Copy files to EC2
         run: |
-          scp -o StrictHostKeyChecking=no laravel-deploy.tar.gz \
-          ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/tmp/
+          scp -o StrictHostKeyChecking=no laravel-deploy.tar.gz ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/tmp/
 
       - name: 🔄 Deploy on EC2
+        env:
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} '
             set -e
