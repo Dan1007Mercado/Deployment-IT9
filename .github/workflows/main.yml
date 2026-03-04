@@ -23,13 +23,13 @@ jobs:
           php-version: 8.3
           extensions: mbstring, xml, bcmath, zip, curl, gd, mysql, pdo_mysql
 
+      - name: 📦 Install Composer dependencies
+        run: composer install --no-progress --prefer-dist
+
       - name: 📋 Copy .env and generate APP_KEY
         run: |
           cp .env.example .env
           php artisan key:generate --no-interaction
-
-      - name: 📦 Install Composer dependencies
-        run: composer install --no-progress --prefer-dist
 
       - name: ✅ Run Laravel tests
         run: php artisan test
