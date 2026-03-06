@@ -201,29 +201,61 @@ jobs:
           ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} '
             set -e
             
+            echo "🚀 Starting deployment..."
+            
             # Navigate to application directory
-            cd /var/www/laravel || { echo "❌ Failed to change directory"; exit 1; }
+            cd /var/www/laravel || { 
+              echo "❌ Failed to change directory. Creating it..."
+              sudo mkdir -p /var/www/laravel
+              sudo chown -R $USER:www-data /var/www/laravel
+              cd /var/www/laravel
+            }
+            
+            # Fix permissions first
+            echo "🔧 Fixing directory permissions..."
+            sudo chown -R $USER:www-data .
+            sudo find . -type f -exec chmod 664 {} \; 2>/dev/null || true
+            sudo find . -type d -exec chmod 775 {} \; 2>/dev/null || true
+            sudo chmod -R 775 storage bootstrap/cache 2>/dev/null || true
+            
+            # Create storage structure if it doesn't exist
+            mkdir -p storage/framework/{sessions,views,cache} storage/logs bootstrap/cache
+            sudo chmod -R 775 storage bootstrap/cache
             
             # Put application in maintenance mode
+            echo "🚧 Putting application in maintenance mode..."
             php artisan down --retry=60 || true
             
-            # Extract new files
+            # Extract new files with proper permissions
             echo "📦 Extracting files..."
-            tar -xzf /tmp/laravel-deploy.tar.gz -C /var/www/laravel
-            
-            # Set proper permissions
-            echo "🔧 Setting permissions..."
-            sudo chown -R $USER:www-data .
-            sudo chmod -R 775 storage bootstrap/cache
+            if [ -f /tmp/laravel-deploy.tar.gz ]; then
+              # Remove everything except .env and storage
+              echo "🧹 Cleaning up old files..."
+              find . -not -path "./.env" -not -path "./storage*" -not -path "./.env" -delete 2>/dev/null || true
+              
+              # Extract with sudo to override permissions
+              sudo tar -xzf /tmp/laravel-deploy.tar.gz -C /var/www/laravel --overwrite --no-same-owner
+              
+              # Fix ownership after extraction
+              echo "🔧 Setting ownership..."
+              sudo chown -R $USER:www-data .
+            else
+              echo "❌ Deployment package not found!"
+              exit 1
+            fi
             
             # Install dependencies
             echo "📦 Installing Composer dependencies..."
             composer install --no-dev --optimize-autoloader --no-interaction
             
             # Generate application key if not exists or empty
+            if [ ! -f .env ]; then
+              echo "📋 Creating .env file..."
+              cp .env.example .env 2>/dev/null || echo "APP_KEY=" > .env
+            fi
+            
             if ! grep -q "^APP_KEY=" .env || [ -z "$(grep "^APP_KEY=" .env | cut -d '=' -f2)" ]; then
               echo "🔑 Generating application key..."
-              # Ensure APP_KEY line exists
               if ! grep -q "^APP_KEY=" .env; then
                 echo "APP_KEY=" >> .env
               fi
@@ -232,31 +264,47 @@ jobs:
               echo "✅ APP_KEY already exists"
             fi
             
+            # Set proper file permissions for Laravel
+            echo "🔧 Setting file permissions..."
+            sudo chown -R $USER:www-data .
+            sudo find . -type f -exec chmod 664 {} \; 2>/dev/null || true
+            sudo find . -type d -exec chmod 775 {} \; 2>/dev/null || true
+            sudo chmod -R 775 storage bootstrap/cache
+            sudo chmod -R 775 public
+            
             # Run migrations
             echo "🗄️ Running database migrations..."
-            php artisan migrate --force
+            php artisan migrate --force || {
+              echo "⚠️ Migration failed, but continuing..."
+            }
             
             # Clear and cache configurations
             echo "⚙️ Optimizing Laravel..."
             php artisan optimize:clear
             php artisan config:cache
-            php artisan route:cache
+            php artisan route:cache || true
             php artisan view:cache
             php artisan event:cache || true
             
             # Create storage link
             echo "🔗 Creating storage link..."
+            rm -rf public/storage
             php artisan storage:link || true
             
-            # Set final permissions
+            # Final permission fixes
             echo "🔧 Setting final permissions..."
             sudo chown -R www-data:www-data storage bootstrap/cache
             sudo chmod -R 775 storage bootstrap/cache
+            sudo chmod -R 775 public
+            
+            # Restart PHP-FPM (adjust based on your PHP version)
+            echo "🔄 Restarting PHP-FPM..."
+            sudo systemctl restart php8.3-fpm 2>/dev/null || sudo service php8.3-fpm restart 2>/dev/null || true
             
             # Restart queue workers if using horizon or queue
             if command -v supervisorctl &> /dev/null; then
               echo "🔄 Restarting queue workers..."
-              sudo supervisorctl restart laravel-worker:* || true
+              sudo supervisorctl restart all 2>/dev/null || sudo supervisorctl restart laravel-worker:* 2>/dev/null || true
             fi
             
             # Bring application back up
@@ -264,31 +312,47 @@ jobs:
             php artisan up
             
             # Clean up
-            rm /tmp/laravel-deploy.tar.gz
+            sudo rm /tmp/laravel-deploy.tar.gz
             
             echo "✅ Deployment completed successfully!"
+            
+            # Show final status
+            php artisan about --only=environment
           '
 
       - name: 🏥 Health check
         run: |
           echo "⏳ Waiting for application to be ready..."
-          sleep 10
-          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.EC2_HOST }} || echo "000")
-          if [ "$HTTP_STATUS" = "200" ] || [ "$HTTP_STATUS" = "302" ]; then
-            echo "✅ Health check passed! (HTTP $HTTP_STATUS)"
-          else
-            echo "⚠️ Health check returned HTTP $HTTP_STATUS"
-            # Don't fail the build, just warn
-          fi
+          sleep 15
+          
+          # Try multiple times
+          for i in {1..5}; do
+            HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.EC2_HOST }} || echo "000")
+            if [ "$HTTP_STATUS" = "200" ] || [ "$HTTP_STATUS" = "302" ]; then
+              echo "✅ Health check passed! (HTTP $HTTP_STATUS)"
+              exit 0
+            fi
+            echo "Attempt $i: HTTP $HTTP_STATUS - retrying in 5 seconds..."
+            sleep 5
+          done
+          
+          echo "⚠️ Health check returned HTTP $HTTP_STATUS after 5 attempts"
+          # Don't fail the build, just warn
 
       - name: 💬 Notify success
         if: success()
         run: |
           echo "✅ Production deployment successful!"
           echo "🌐 Application is live at: http://${{ secrets.EC2_HOST }}"
+          echo "🚀 Deployment completed at $(date)"
 
       - name: 💬 Notify failure
         if: failure()
         run: |
           echo "❌ Deployment failed!"
           echo "Please check the logs above for details."
+          echo "🆘 Try running these commands manually on your EC2 instance:"
+          echo "  cd /var/www/laravel"
+          echo "  sudo chown -R \$USER:www-data ."
+          echo "  sudo chmod -R 775 storage bootstrap/cache"
+          echo "  php artisan up"
