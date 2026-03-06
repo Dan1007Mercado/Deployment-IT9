@@ -163,6 +163,7 @@ jobs:
 
       - name: 📦 Create deployment package
         run: |
+          echo "📦 Creating deployment package..."
           mkdir -p deployment
           rsync -av --exclude='.git' \
                     --exclude='.github' \
@@ -178,6 +179,9 @@ jobs:
                     --exclude='storage/app/public/*' \
                     ./ deployment/
           cd deployment && tar -czf ../laravel-deploy.tar.gz .
+          cd ..
+          echo "✅ Deployment package created:"
+          ls -lh laravel-deploy.tar.gz
 
       - name: 🔑 Setup SSH
         run: |
@@ -188,136 +192,193 @@ jobs:
 
       - name: 📤 Copy files to EC2
         run: |
-          scp -o StrictHostKeyChecking=no laravel-deploy.tar.gz ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/tmp/
+          echo "📤 Copying deployment package to EC2..."
+          
+          # Check if local file exists
+          if [ ! -f laravel-deploy.tar.gz ]; then
+            echo "❌ Local file laravel-deploy.tar.gz not found!"
+            exit 1
+          fi
+          
+          echo "✅ Local file found: $(ls -lh laravel-deploy.tar.gz)"
+          
+          # Copy file to EC2
+          scp -o StrictHostKeyChecking=no -o ConnectTimeout=30 laravel-deploy.tar.gz ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/tmp/
+          
+          if [ $? -eq 0 ]; then
+            echo "✅ File copied successfully"
+          else
+            echo "❌ SCP failed"
+            exit 1
+          fi
+          
+          # Verify file exists on EC2
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "
+            if [ -f /tmp/laravel-deploy.tar.gz ]; then
+              echo '✅ File verified on EC2:'
+              ls -lh /tmp/laravel-deploy.tar.gz
+            else
+              echo '❌ File not found on EC2 after copy!'
+              exit 1
+            fi
+          "
 
       - name: 🔄 Deploy on EC2
         env:
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-          EC2_HOST: ${{ secrets.EC2_HOST }}
-          EC2_USER: ${{ secrets.EC2_USER }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} '
             set -e
             
             echo "🚀 Starting deployment..."
+            echo "==================================="
             
-            # Navigate to application directory
-            cd /var/www/laravel || { 
-              echo "❌ Failed to change directory. Creating it..."
-              sudo mkdir -p /var/www/laravel
-              sudo chown -R $USER:www-data /var/www/laravel
-              cd /var/www/laravel
-            }
-            
-            # Fix permissions first
-            echo "🔧 Fixing directory permissions..."
-            sudo chown -R $USER:www-data .
-            sudo find . -type f -exec chmod 664 {} \; 2>/dev/null || true
-            sudo find . -type d -exec chmod 775 {} \; 2>/dev/null || true
-            sudo chmod -R 775 storage bootstrap/cache 2>/dev/null || true
-            
-            # Create storage structure if it doesn't exist
-            mkdir -p storage/framework/{sessions,views,cache} storage/logs bootstrap/cache
-            sudo chmod -R 775 storage bootstrap/cache
-            
-            # Put application in maintenance mode
-            echo "🚧 Putting application in maintenance mode..."
-            php artisan down --retry=60 || true
-            
-            # Extract new files with proper permissions
-            echo "📦 Extracting files..."
-            if [ -f /tmp/laravel-deploy.tar.gz ]; then
-              # Remove everything except .env and storage
-              echo "🧹 Cleaning up old files..."
-              find . -not -path "./.env" -not -path "./storage*" -not -path "./.env" -delete 2>/dev/null || true
-              
-              # Extract with sudo to override permissions
-              sudo tar -xzf /tmp/laravel-deploy.tar.gz -C /var/www/laravel --overwrite --no-same-owner
-              
-              # Fix ownership after extraction
-              echo "🔧 Setting ownership..."
-              sudo chown -R $USER:www-data .
-            else
-              echo "❌ Deployment package not found!"
+            # Step 1: Verify deployment package exists
+            echo "🔍 Step 1: Checking deployment package..."
+            if [ ! -f /tmp/laravel-deploy.tar.gz ]; then
+              echo "❌ Deployment package not found in /tmp!"
+              echo "Contents of /tmp:"
+              ls -la /tmp/
               exit 1
             fi
+            echo "✅ Found deployment package:"
+            ls -lh /tmp/laravel-deploy.tar.gz
+            echo "==================================="
             
-            # Install dependencies
-            echo "📦 Installing Composer dependencies..."
-            composer install --no-dev --optimize-autoloader --no-interaction
+            # Step 2: Navigate to application directory
+            echo "📁 Step 2: Preparing application directory..."
+            if [ ! -d /var/www/laravel ]; then
+              echo "Creating application directory..."
+              sudo mkdir -p /var/www/laravel
+            fi
+            cd /var/www/laravel
+            echo "Current directory: $(pwd)"
+            echo "==================================="
             
-            # Generate application key if not exists or empty
-            if [ ! -f .env ]; then
-              echo "📋 Creating .env file..."
+            # Step 3: Put application in maintenance mode
+            echo "🚧 Step 3: Putting application in maintenance mode..."
+            if [ -f artisan ]; then
+              php artisan down --retry=60 || echo "Maintenance mode failed, continuing..."
+            else
+              echo "Artisan not found, skipping maintenance mode"
+            fi
+            echo "==================================="
+            
+            # Step 4: Backup .env file if it exists
+            echo "💾 Step 4: Backing up configuration..."
+            if [ -f .env ]; then
+              cp .env .env.backup
+              echo "✅ .env file backed up"
+            fi
+            echo "==================================="
+            
+            # Step 5: Extract new files
+            echo "📦 Step 5: Extracting new files..."
+            # Remove old files (except storage and .env)
+            find . -not -path "./storage*" -not -path "./.env" -not -path "./.env.backup" -not -path "." -delete 2>/dev/null || true
+            
+            # Extract the new package
+            tar -xzf /tmp/laravel-deploy.tar.gz -C /var/www/laravel
+            echo "✅ Extraction complete"
+            echo "Files extracted:"
+            ls -la /var/www/laravel | head -10
+            echo "==================================="
+            
+            # Step 6: Restore .env file
+            echo "🔧 Step 6: Restoring configuration..."
+            if [ -f .env.backup ] && [ ! -f .env ]; then
+              mv .env.backup .env
+              echo "✅ .env file restored"
+            elif [ ! -f .env ]; then
+              echo "⚠️ No .env file found, creating from example..."
               cp .env.example .env 2>/dev/null || echo "APP_KEY=" > .env
             fi
+            echo "==================================="
             
-            if ! grep -q "^APP_KEY=" .env || [ -z "$(grep "^APP_KEY=" .env | cut -d '=' -f2)" ]; then
-              echo "🔑 Generating application key..."
-              if ! grep -q "^APP_KEY=" .env; then
-                echo "APP_KEY=" >> .env
-              fi
-              php artisan key:generate --force
+            # Step 7: Set permissions
+            echo "🔒 Step 7: Setting permissions..."
+            sudo chown -R $USER:www-data /var/www/laravel
+            sudo chmod -R 755 /var/www/laravel
+            sudo chmod -R 775 /var/www/laravel/storage /var/www/laravel/bootstrap/cache
+            echo "✅ Permissions set"
+            echo "==================================="
+            
+            # Step 8: Install dependencies
+            echo "📦 Step 8: Installing Composer dependencies..."
+            if [ -f composer.json ]; then
+              composer install --no-dev --optimize-autoloader --no-interaction
+              echo "✅ Composer dependencies installed"
             else
-              echo "✅ APP_KEY already exists"
+              echo "⚠️ composer.json not found"
             fi
+            echo "==================================="
             
-            # Set proper file permissions for Laravel
-            echo "🔧 Setting file permissions..."
-            sudo chown -R $USER:www-data .
-            sudo find . -type f -exec chmod 664 {} \; 2>/dev/null || true
-            sudo find . -type d -exec chmod 775 {} \; 2>/dev/null || true
-            sudo chmod -R 775 storage bootstrap/cache
-            sudo chmod -R 775 public
-            
-            # Run migrations
-            echo "🗄️ Running database migrations..."
-            php artisan migrate --force || {
-              echo "⚠️ Migration failed, but continuing..."
-            }
-            
-            # Clear and cache configurations
-            echo "⚙️ Optimizing Laravel..."
-            php artisan optimize:clear
-            php artisan config:cache
-            php artisan route:cache || true
-            php artisan view:cache
-            php artisan event:cache || true
-            
-            # Create storage link
-            echo "🔗 Creating storage link..."
-            rm -rf public/storage
-            php artisan storage:link || true
-            
-            # Final permission fixes
-            echo "🔧 Setting final permissions..."
-            sudo chown -R www-data:www-data storage bootstrap/cache
-            sudo chmod -R 775 storage bootstrap/cache
-            sudo chmod -R 775 public
-            
-            # Restart PHP-FPM (adjust based on your PHP version)
-            echo "🔄 Restarting PHP-FPM..."
-            sudo systemctl restart php8.3-fpm 2>/dev/null || sudo service php8.3-fpm restart 2>/dev/null || true
-            
-            # Restart queue workers if using horizon or queue
-            if command -v supervisorctl &> /dev/null; then
-              echo "🔄 Restarting queue workers..."
-              sudo supervisorctl restart all 2>/dev/null || sudo supervisorctl restart laravel-worker:* 2>/dev/null || true
+            # Step 9: Generate application key
+            echo "🔑 Step 9: Checking application key..."
+            if [ -f artisan ]; then
+              if ! grep -q "^APP_KEY=" .env || [ -z "$(grep "^APP_KEY=" .env | cut -d '=' -f2)" ]; then
+                echo "Generating application key..."
+                php artisan key:generate --force
+              else
+                echo "✅ APP_KEY already exists"
+              fi
             fi
+            echo "==================================="
             
-            # Bring application back up
-            echo "🚀 Bringing application online..."
-            php artisan up
+            # Step 10: Run migrations
+            echo "🗄️ Step 10: Running database migrations..."
+            if [ -f artisan ]; then
+              php artisan migrate --force || echo "⚠️ Migrations failed, continuing..."
+            fi
+            echo "==================================="
             
-            # Clean up
-            sudo rm /tmp/laravel-deploy.tar.gz
+            # Step 11: Optimize Laravel
+            echo "⚙️ Step 11: Optimizing Laravel..."
+            if [ -f artisan ]; then
+              php artisan optimize:clear
+              php artisan config:cache
+              php artisan route:cache || true
+              php artisan view:cache
+              echo "✅ Optimization complete"
+            fi
+            echo "==================================="
             
-            echo "✅ Deployment completed successfully!"
+            # Step 12: Create storage link
+            echo "🔗 Step 12: Creating storage link..."
+            if [ -f artisan ]; then
+              php artisan storage:link || true
+            fi
+            echo "==================================="
             
-            # Show final status
-            php artisan about --only=environment
+            # Step 13: Final permissions
+            echo "🔒 Step 13: Setting final permissions..."
+            sudo chown -R www-data:www-data /var/www/laravel/storage /var/www/laravel/bootstrap/cache
+            sudo chmod -R 775 /var/www/laravel/storage /var/www/laravel/bootstrap/cache
+            echo "✅ Final permissions set"
+            echo "==================================="
+            
+            # Step 14: Bring application back up
+            echo "🚀 Step 14: Bringing application online..."
+            if [ -f artisan ]; then
+              php artisan up
+            fi
+            echo "==================================="
+            
+            # Step 15: Clean up
+            echo "🧹 Step 15: Cleaning up..."
+            rm -f /tmp/laravel-deploy.tar.gz
+            rm -f /var/www/laravel/.env.backup
+            echo "✅ Cleanup complete"
+            echo "==================================="
+            
+            echo "✅✅✅ DEPLOYMENT COMPLETED SUCCESSFULLY! ✅✅✅"
+            
+            # Show Laravel status
+            if [ -f artisan ]; then
+              echo ""
+              echo "📊 Application Status:"
+              php artisan about --only=environment
+            fi
           '
 
       - name: 🏥 Health check
@@ -342,16 +403,18 @@ jobs:
       - name: 💬 Notify success
         if: success()
         run: |
-          echo "✅ Production deployment successful!"
+          echo "✅✅✅ PRODUCTION DEPLOYMENT SUCCESSFUL! ✅✅✅"
           echo "🌐 Application is live at: http://${{ secrets.EC2_HOST }}"
           echo "🚀 Deployment completed at $(date)"
 
       - name: 💬 Notify failure
         if: failure()
         run: |
-          echo "❌ Deployment failed!"
+          echo "❌❌❌ DEPLOYMENT FAILED! ❌❌❌"
           echo "Please check the logs above for details."
-          echo "🆘 Try running these commands manually on your EC2 instance:"
+          echo ""
+          echo "🆘 Quick fixes to try manually on your EC2 instance:"
+          echo "  ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}"
           echo "  cd /var/www/laravel"
           echo "  sudo chown -R \$USER:www-data ."
           echo "  sudo chmod -R 775 storage bootstrap/cache"
