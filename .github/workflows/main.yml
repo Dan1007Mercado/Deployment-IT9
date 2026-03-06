@@ -348,6 +348,16 @@ jobs:
               echo "⚠️ composer.json not found"
             fi
             echo "==================================="
+            # Step 7.5:Ensure AWS S3 Flysystem package is installed
+            if [ -f composer.json ]; then
+              if ! grep -q "league/flysystem-aws-s3-v3" composer.json; then
+                echo "Adding AWS S3 Flysystem package..."
+                composer require league/flysystem-aws-s3-v3 --no-interaction
+                echo "✅ AWS S3 Flysystem package added"
+              else
+                echo "✅ AWS S3 Flysystem package already present"
+              fi
+            fi
             
             # Step 8: Build frontend assets (CRITICAL FIX FOR VITE MANIFEST)
             echo "🎨 Step 8: Building frontend assets..."
