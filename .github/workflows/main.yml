@@ -272,14 +272,59 @@ jobs:
             fi
             echo "==================================="
             
-            # Step 5: Extract new files
-            echo "📦 Step 5: Extracting new files..."
-            # Remove old files (except storage and .env)
-            find . -not -path "./storage*" -not -path "./.env" -not -path "./.env.backup" -not -path "." -delete 2>/dev/null || true
+            # Step 5: Extract new files while preserving storage
+            echo "📦 Step 5: Extracting new files while preserving storage..."
             
-            # Extract the new package
-            tar -xzf /tmp/laravel-deploy.tar.gz -C /var/www/laravel
-            echo "✅ Extraction complete"
+            # Create a timestamp for backup
+            TIMESTAMP=$(date +%s)
+            
+            # Backup storage directory if it exists and has files
+            if [ -d storage ] && [ "$(ls -A storage 2>/dev/null)" ]; then
+              echo "Backing up storage directory..."
+              sudo mv storage /tmp/storage-backup-$TIMESTAMP
+              BACKUP_CREATED=true
+            else
+              BACKUP_CREATED=false
+            fi
+            
+            # Backup bootstrap/cache if it exists and has files (except .gitignore)
+            if [ -d bootstrap/cache ] && [ "$(ls -A bootstrap/cache 2>/dev/null | grep -v ".gitignore")" ]; then
+              echo "Backing up bootstrap/cache directory..."
+              sudo mv bootstrap/cache /tmp/cache-backup-$TIMESTAMP
+              CACHE_BACKUP_CREATED=true
+            else
+              CACHE_BACKUP_CREATED=false
+            fi
+            
+            # Remove all other files (with sudo)
+            echo "Cleaning up old files..."
+            sudo find . -not -path "./.env" -not -path "./.env.backup" -delete 2>/dev/null || true
+            
+            # Extract the new package with sudo
+            echo "Extracting new files with sudo..."
+            sudo tar -xzf /tmp/laravel-deploy.tar.gz -C /var/www/laravel --overwrite --no-same-owner
+            
+            # Restore storage if it was backed up
+            if [ "$BACKUP_CREATED" = true ] && [ -d /tmp/storage-backup-$TIMESTAMP ]; then
+              echo "Restoring original storage directory..."
+              sudo rm -rf storage 2>/dev/null || true
+              sudo mv /tmp/storage-backup-$TIMESTAMP storage
+            fi
+            
+            # Restore bootstrap/cache if it was backed up
+            if [ "$CACHE_BACKUP_CREATED" = true ] && [ -d /tmp/cache-backup-$TIMESTAMP ]; then
+              echo "Restoring original bootstrap/cache directory..."
+              sudo rm -rf bootstrap/cache 2>/dev/null || true
+              sudo mv /tmp/cache-backup-$TIMESTAMP bootstrap/cache
+            fi
+            
+            # Fix ownership immediately after extraction
+            echo "Fixing permissions..."
+            sudo chown -R $USER:www-data /var/www/laravel
+            sudo chmod -R 755 /var/www/laravel
+            sudo chmod -R 775 /var/www/laravel/storage /var/www/laravel/bootstrap/cache
+            
+            echo "✅ Extraction complete with storage preserved"
             echo "Files extracted:"
             ls -la /var/www/laravel | head -10
             echo "==================================="
@@ -295,16 +340,8 @@ jobs:
             fi
             echo "==================================="
             
-            # Step 7: Set permissions
-            echo "🔒 Step 7: Setting permissions..."
-            sudo chown -R $USER:www-data /var/www/laravel
-            sudo chmod -R 755 /var/www/laravel
-            sudo chmod -R 775 /var/www/laravel/storage /var/www/laravel/bootstrap/cache
-            echo "✅ Permissions set"
-            echo "==================================="
-            
-            # Step 8: Install dependencies
-            echo "📦 Step 8: Installing Composer dependencies..."
+            # Step 7: Install dependencies
+            echo "📦 Step 7: Installing Composer dependencies..."
             if [ -f composer.json ]; then
               composer install --no-dev --optimize-autoloader --no-interaction
               echo "✅ Composer dependencies installed"
@@ -313,8 +350,8 @@ jobs:
             fi
             echo "==================================="
             
-            # Step 9: Generate application key
-            echo "🔑 Step 9: Checking application key..."
+            # Step 8: Generate application key
+            echo "🔑 Step 8: Checking application key..."
             if [ -f artisan ]; then
               if ! grep -q "^APP_KEY=" .env || [ -z "$(grep "^APP_KEY=" .env | cut -d '=' -f2)" ]; then
                 echo "Generating application key..."
@@ -325,15 +362,15 @@ jobs:
             fi
             echo "==================================="
             
-            # Step 10: Run migrations
-            echo "🗄️ Step 10: Running database migrations..."
+            # Step 9: Run migrations
+            echo "🗄️ Step 9: Running database migrations..."
             if [ -f artisan ]; then
               php artisan migrate --force || echo "⚠️ Migrations failed, continuing..."
             fi
             echo "==================================="
             
-            # Step 11: Optimize Laravel
-            echo "⚙️ Step 11: Optimizing Laravel..."
+            # Step 10: Optimize Laravel
+            echo "⚙️ Step 10: Optimizing Laravel..."
             if [ -f artisan ]; then
               php artisan optimize:clear
               php artisan config:cache
@@ -343,22 +380,24 @@ jobs:
             fi
             echo "==================================="
             
-            # Step 12: Create storage link
-            echo "🔗 Step 12: Creating storage link..."
+            # Step 11: Create storage link
+            echo "🔗 Step 11: Creating storage link..."
             if [ -f artisan ]; then
+              # Remove existing link if it exists
+              rm -rf public/storage
               php artisan storage:link || true
             fi
             echo "==================================="
             
-            # Step 13: Final permissions
-            echo "🔒 Step 13: Setting final permissions..."
+            # Step 12: Final permissions
+            echo "🔒 Step 12: Setting final permissions..."
             sudo chown -R www-data:www-data /var/www/laravel/storage /var/www/laravel/bootstrap/cache
             sudo chmod -R 775 /var/www/laravel/storage /var/www/laravel/bootstrap/cache
             echo "✅ Final permissions set"
             echo "==================================="
             
-            # Step 14: Fix maintenance mode file and bring application back up
-            echo "🚀 Step 14: Bringing application online..."
+            # Step 13: Fix maintenance mode file and bring application back up
+            echo "🚀 Step 13: Bringing application online..."
             
             # Fix the maintenance mode file permission if it exists
             if [ -f storage/framework/down ]; then
@@ -376,10 +415,13 @@ jobs:
             fi
             echo "==================================="
             
-            # Step 15: Clean up
-            echo "🧹 Step 15: Cleaning up..."
+            # Step 14: Clean up
+            echo "🧹 Step 14: Cleaning up..."
             rm -f /tmp/laravel-deploy.tar.gz
             rm -f /var/www/laravel/.env.backup
+            # Remove any remaining backups
+            sudo rm -rf /tmp/storage-backup-* 2>/dev/null || true
+            sudo rm -rf /tmp/cache-backup-* 2>/dev/null || true
             echo "✅ Cleanup complete"
             echo "==================================="
             
