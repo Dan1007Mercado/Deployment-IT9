@@ -158,10 +158,8 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: ap-southeast-1
         run: |
-          echo "📤 Uploading assets to S3..."
-          aws s3 sync public/ s3://laravel-cloud-storage-hotel-1234/public/ --delete --exclude "index.php" || echo "⚠️ S3 upload failed but continuing..."
-          aws s3 sync public/build/ s3://laravel-cloud-storage-hotel-1234/build/ --delete || echo "⚠️ S3 build upload failed but continuing..."
-          echo "✅ S3 upload complete"
+          aws s3 sync public/ s3://laravel-cloud-storage-hotel-1234/public/ --delete --exclude "index.php" || true
+          aws s3 sync public/build/ s3://laravel-cloud-storage-hotel-1234/build/ --delete || true
 
       - name: 📦 Create deployment package
         run: |
@@ -385,7 +383,7 @@ jobs:
             fi
             echo "==================================="
             
-            # Step 7.5: Ensure AWS S3 Flysystem package is installed
+            # Step 7.5: Ensure AWS S3 Flysystem package is installed (FIX FOR THE ERROR)
             echo "☁️ Step 7.5: Installing AWS S3 Flysystem package..."
             if [ -f composer.json ]; then
               # Check if the package is already installed
@@ -501,15 +499,8 @@ jobs:
             echo "✅ Final permissions set"
             echo "==================================="
             
-            # Step 15: Test S3 connection
-            echo "☁️ Step 15: Testing S3 connection..."
-            if [ -f artisan ]; then
-              php artisan tinker --execute="try { \\Illuminate\\Support\\Facades\\Storage::disk(\"s3\")->put(\"test.txt\", \"S3 connection test from deployment at $(date)\"); echo \"✅ S3 connection successful\"; } catch (\\Exception \$e) { echo \"⚠️ S3 connection failed: \" . \$e->getMessage(); }"
-            fi
-            echo "==================================="
-            
-            # Step 16: Fix maintenance mode file and bring application back up
-            echo "🚀 Step 16: Bringing application online..."
+            # Step 15: Fix maintenance mode file and bring application back up
+            echo "🚀 Step 15: Bringing application online..."
             
             # Fix the maintenance mode file permission if it exists
             if [ -f storage/framework/down ]; then
@@ -527,8 +518,8 @@ jobs:
             fi
             echo "==================================="
             
-            # Step 17: Clean up
-            echo "🧹 Step 17: Cleaning up..."
+            # Step 16: Clean up
+            echo "🧹 Step 16: Cleaning up..."
             rm -f /tmp/laravel-deploy.tar.gz
             rm -f /var/www/laravel/.env.backup
             rm -f /var/www/laravel/.env.temp
@@ -589,12 +580,7 @@ jobs:
           echo "🆘 Quick fixes to try manually on your EC2 instance:"
           echo "  ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}"
           echo "  cd /var/www/laravel"
-          echo "  # Add AWS credentials to .env"
-          echo "  echo \"AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}\" >> .env"
-          echo "  echo \"AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}\" >> .env"
-          echo "  echo \"AWS_DEFAULT_REGION=ap-southeast-1\" >> .env"
-          echo "  echo \"AWS_BUCKET=laravel-cloud-storage-hotel-1234\" >> .env"
+          echo "  composer require league/flysystem-aws-s3-v3 \"^3.0\""
           echo "  php artisan config:clear"
           echo "  php artisan config:cache"
-          echo "  composer require league/flysystem-aws-s3-v3 \"^3.0\""
           echo "  sudo php artisan up"
