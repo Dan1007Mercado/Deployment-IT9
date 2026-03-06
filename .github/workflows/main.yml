@@ -9,9 +9,6 @@ on:
       - main
 
 jobs:
-  # ============================================================
-  # JOB 1: Run Tests
-  # ============================================================
   test:
     name: 🧪 Run Tests
     runs-on: ubuntu-latest
@@ -42,46 +39,80 @@ jobs:
       - name: 🏗️ Build assets for testing
         run: npm run build
 
-      - name: 📋 Create & configure test environment
+      - name: 📋 Create environment file
         run: |
-          cp .env.example .env 2>/dev/null || echo "APP_KEY=" > .env
-          grep -q "^APP_KEY=" .env || echo "APP_KEY=" >> .env
+          # Copy example file
+          cp .env.example .env || echo "No .env.example found, creating new .env"
+          
+          # If .env is empty or doesn't have APP_KEY, add it
+          if ! grep -q "^APP_KEY=" .env; then
+            echo "APP_KEY=" >> .env
+          fi
+          
+          # Generate key (this will work even if APP_KEY line exists but is empty)
           php artisan key:generate --no-interaction --force
+          
+          echo "✅ APP_KEY generated successfully"
 
-          # Verify key was generated
+      - name: 📋 Configure testing environment
+        run: |
+          # Verify APP_KEY was generated successfully
           APP_KEY_VALUE=$(grep "^APP_KEY=" .env | cut -d'=' -f2-)
-          [ -z "$APP_KEY_VALUE" ] && echo "❌ APP_KEY is empty!" && exit 1
-          echo "✅ APP_KEY verified"
-
-          # Remove any conflicting lines then append test config
-          for KEY in APP_ENV APP_DEBUG DB_CONNECTION DB_DATABASE CACHE_DRIVER \
-                     SESSION_DRIVER QUEUE_CONNECTION MAIL_MAILER BROADCAST_DRIVER ASSET_URL; do
-            sed -i "/^${KEY}=/d" .env
-          done
-
-          cat >> .env <<'EOF'
-          APP_ENV=testing
-          APP_DEBUG=true
-          DB_CONNECTION=sqlite
-          DB_DATABASE=:memory:
-          CACHE_DRIVER=array
-          SESSION_DRIVER=array
-          QUEUE_CONNECTION=sync
-          MAIL_MAILER=array
-          BROADCAST_DRIVER=log
-          ASSET_URL=http://localhost
-          EOF
-
-          # Create a fallback Vite manifest for testing
+          if [ -z "$APP_KEY_VALUE" ]; then
+            echo "❌ APP_KEY is empty!"
+            exit 1
+          fi
+          
+          echo "✅ APP_KEY verified: ${APP_KEY_VALUE:0:20}..."
+          
+          # Remove existing testing config lines if they exist
+          sed -i '/^APP_ENV=/d' .env 2>/dev/null || true
+          sed -i '/^APP_DEBUG=/d' .env 2>/dev/null || true
+          sed -i '/^DB_CONNECTION=/d' .env 2>/dev/null || true
+          sed -i '/^DB_DATABASE=/d' .env 2>/dev/null || true
+          sed -i '/^CACHE_DRIVER=/d' .env 2>/dev/null || true
+          sed -i '/^SESSION_DRIVER=/d' .env 2>/dev/null || true
+          sed -i '/^QUEUE_CONNECTION=/d' .env 2>/dev/null || true
+          sed -i '/^MAIL_MAILER=/d' .env 2>/dev/null || true
+          sed -i '/^BROADCAST_DRIVER=/d' .env 2>/dev/null || true
+          sed -i '/^ASSET_URL=/d' .env 2>/dev/null || true
+          
+          # Append testing configurations
+          echo "APP_ENV=testing" >> .env
+          echo "APP_DEBUG=true" >> .env
+          echo "DB_CONNECTION=sqlite" >> .env
+          echo "DB_DATABASE=:memory:" >> .env
+          echo "CACHE_DRIVER=array" >> .env
+          echo "SESSION_DRIVER=array" >> .env
+          echo "QUEUE_CONNECTION=sync" >> .env
+          echo "MAIL_MAILER=array" >> .env
+          echo "BROADCAST_DRIVER=log" >> .env
+          
+          # For Vite, we need to set the asset URL or use a fake manifest
+          echo "ASSET_URL=http://localhost" >> .env
+          
+          # Create a fake manifest file for testing if it doesn't exist
           mkdir -p public/build
-          [ -f public/build/manifest.json ] || cat > public/build/manifest.json <<'MANIFEST'
-          {
-            "resources/js/app.js":  { "file": "assets/app.js",  "isEntry": true, "src": "resources/js/app.js" },
-            "resources/css/app.css": { "file": "assets/app.css", "src": "resources/css/app.css" }
-          }
-          MANIFEST
+          if [ ! -f public/build/manifest.json ]; then
+            echo '{
+              "resources/js/app.js": {
+                "file": "assets/app.js",
+                "isEntry": true,
+                "src": "resources/js/app.js"
+              },
+              "resources/css/app.css": {
+                "file": "assets/app.css",
+                "src": "resources/css/app.css"
+              }
+            }' > public/build/manifest.json
+          fi
+          
+          # Final verification
+          echo ""
+          echo "📋 Final .env configuration:"
+          grep -E "^(APP_KEY|APP_ENV|APP_DEBUG|DB_CONNECTION|CACHE_DRIVER|ASSET_URL)" .env || true
 
-      - name: 🔄 Cache Laravel config
+      - name: 🔄 Clear and cache config
         run: |
           php artisan config:clear
           php artisan config:cache
@@ -89,9 +120,6 @@ jobs:
       - name: ✅ Run Laravel tests
         run: php artisan test
 
-  # ============================================================
-  # JOB 2: Deploy to Production
-  # ============================================================
   deploy:
     name: 🚀 Deploy to Production
     runs-on: ubuntu-latest
@@ -121,36 +149,38 @@ jobs:
       - name: 📦 Install NPM dependencies
         run: npm ci
 
-      - name: 🏗️ Build frontend assets
+      - name: 🏗️ Build assets
         run: npm run build
 
-      - name: 📤 Upload built assets to S3
+      - name: 📤 Upload assets to S3
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: ap-southeast-1
         run: |
-          aws s3 sync public/       s3://laravel-cloud-storage-hotel-1234/public/ --delete --exclude "index.php" || true
-          aws s3 sync public/build/ s3://laravel-cloud-storage-hotel-1234/build/  --delete || true
+          aws s3 sync public/ s3://laravel-cloud-storage-hotel-1234/public/ --delete --exclude "index.php" || true
+          aws s3 sync public/build/ s3://laravel-cloud-storage-hotel-1234/build/ --delete || true
 
       - name: 📦 Create deployment package
         run: |
-          rsync -a \
-            --exclude='.git' \
-            --exclude='.github' \
-            --exclude='node_modules' \
-            --exclude='tests' \
-            --exclude='.env' \
-            --exclude='.env.*' \
-            --exclude='storage/logs/*' \
-            --exclude='storage/framework/cache/*' \
-            --exclude='storage/framework/sessions/*' \
-            --exclude='storage/framework/testing/*' \
-            --exclude='storage/app/public/*' \
-            ./ deployment/
-
-          tar -czf laravel-deploy.tar.gz -C deployment .
-          echo "✅ Package created: $(ls -lh laravel-deploy.tar.gz)"
+          echo "📦 Creating deployment package..."
+          mkdir -p deployment
+          rsync -av --exclude='.git' \
+                    --exclude='.github' \
+                    --exclude='node_modules' \
+                    --exclude='tests' \
+                    --exclude='.env' \
+                    --exclude='.env.*' \
+                    --exclude='storage/logs/*' \
+                    --exclude='storage/framework/cache/*' \
+                    --exclude='storage/framework/sessions/*' \
+                    --exclude='storage/framework/testing/*' \
+                    --exclude='storage/app/public/*' \
+                    ./ deployment/
+          cd deployment && tar -czf ../laravel-deploy.tar.gz .
+          cd ..
+          echo "✅ Deployment package created:"
+          ls -lh laravel-deploy.tar.gz
 
       - name: 🔑 Setup SSH
         run: |
@@ -159,304 +189,340 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
 
-      - name: 📤 Copy deployment package to EC2
+      - name: 📤 Copy files to EC2
         run: |
-          scp -o StrictHostKeyChecking=no -o ConnectTimeout=30 \
-            laravel-deploy.tar.gz \
-            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/tmp/laravel-deploy.tar.gz
-          echo "✅ Package uploaded to EC2"
-
-      # -----------------------------------------------------------------
-      # Write secrets to EC2 as a standalone env file BEFORE the main
-      # deploy script runs. This avoids injecting ${{ secrets.* }} values
-      # directly inside a remote shell heredoc, which breaks when the
-      # secret contains shell-special characters (+, /, =, &, etc.).
-      # -----------------------------------------------------------------
-      - name: 🔐 Push secrets to EC2 (safe method)
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-        run: |
-          # Use printf + base64 so no special character can break the remote shell
-          AWS_KEY_B64=$(printf '%s' "$AWS_ACCESS_KEY_ID"     | base64 -w0)
-          AWS_SEC_B64=$(printf '%s' "$AWS_SECRET_ACCESS_KEY" | base64 -w0)
-          DB_PASS_B64=$(printf '%s' "$DB_PASSWORD"           | base64 -w0)
-
-          ssh -o StrictHostKeyChecking=no \
-              ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
-              "printf '%s\n' \
-                'AWS_KEY_B64=${AWS_KEY_B64}' \
-                'AWS_SEC_B64=${AWS_SEC_B64}' \
-                'DB_PASS_B64=${DB_PASS_B64}' \
-              > /tmp/deploy_secrets.env"
-
-          echo "✅ Secrets pushed to EC2 securely"
+          echo "📤 Copying deployment package to EC2..."
+          
+          # Check if local file exists
+          if [ ! -f laravel-deploy.tar.gz ]; then
+            echo "❌ Local file laravel-deploy.tar.gz not found!"
+            exit 1
+          fi
+          
+          echo "✅ Local file found: $(ls -lh laravel-deploy.tar.gz)"
+          
+          # Copy file to EC2
+          scp -o StrictHostKeyChecking=no -o ConnectTimeout=30 laravel-deploy.tar.gz ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/tmp/
+          
+          if [ $? -eq 0 ]; then
+            echo "✅ File copied successfully"
+          else
+            echo "❌ SCP failed"
+            exit 1
+          fi
+          
+          # Verify file exists on EC2
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "
+            if [ -f /tmp/laravel-deploy.tar.gz ]; then
+              echo '✅ File verified on EC2:'
+              ls -lh /tmp/laravel-deploy.tar.gz
+            else
+              echo '❌ File not found on EC2 after copy!'
+              exit 1
+            fi
+          "
 
       - name: 🔄 Deploy on EC2
+        env:
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
         run: |
-          ssh -o StrictHostKeyChecking=no \
-              ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'ENDSSH'
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} '
             set -e
-
-            # ----------------------------------------------------------
-            # Decode secrets from the env file written in the prior step.
-            # This is the ONLY safe way to consume secrets in a heredoc.
-            # ----------------------------------------------------------
-            source /tmp/deploy_secrets.env
-            AWS_ACCESS_KEY_ID=$(echo "$AWS_KEY_B64"  | base64 -d)
-            AWS_SECRET_ACCESS_KEY=$(echo "$AWS_SEC_B64" | base64 -d)
-            DB_PASSWORD=$(echo "$DB_PASS_B64" | base64 -d)
-            rm -f /tmp/deploy_secrets.env   # delete immediately after reading
-
-            APP_DIR="/var/www/laravel"
-            TIMESTAMP=$(date +%s)
-
-            echo "🚀 Starting deployment — $(date)"
+            
+            echo "🚀 Starting deployment..."
             echo "==================================="
-
-            # ----------------------------------------------------------
-            # Step 1: Verify package
-            # ----------------------------------------------------------
-            echo "🔍 Step 1: Verifying deployment package..."
-            [ -f /tmp/laravel-deploy.tar.gz ] \
-              || { echo "❌ Package not found in /tmp!"; ls -la /tmp/; exit 1; }
-            echo "✅ Package found: $(ls -lh /tmp/laravel-deploy.tar.gz)"
-
-            # ----------------------------------------------------------
-            # Step 2: Maintenance mode
-            # ----------------------------------------------------------
-            echo "🚧 Step 2: Enabling maintenance mode..."
-            [ -f "$APP_DIR/artisan" ] \
-              && php "$APP_DIR/artisan" down --retry=60 2>/dev/null \
-              || echo "Artisan not found — skipping maintenance mode"
-
-            # ----------------------------------------------------------
-            # Step 3: Backup .env + persistent directories
-            # ----------------------------------------------------------
-            echo "💾 Step 3: Backing up persistent data..."
-
-            [ -f "$APP_DIR/.env" ] && cp "$APP_DIR/.env" /tmp/laravel-env-backup-$TIMESTAMP
-
-            if [ -d "$APP_DIR/storage" ] && [ "$(ls -A "$APP_DIR/storage" 2>/dev/null)" ]; then
-              sudo mv "$APP_DIR/storage" /tmp/storage-backup-$TIMESTAMP
+            
+            # Step 1: Verify deployment package exists
+            echo "🔍 Step 1: Checking deployment package..."
+            if [ ! -f /tmp/laravel-deploy.tar.gz ]; then
+              echo "❌ Deployment package not found in /tmp!"
+              echo "Contents of /tmp:"
+              ls -la /tmp/
+              exit 1
             fi
-
-            if [ -d "$APP_DIR/bootstrap/cache" ] \
-               && [ "$(ls -A "$APP_DIR/bootstrap/cache" 2>/dev/null | grep -v '.gitignore')" ]; then
-              sudo mv "$APP_DIR/bootstrap/cache" /tmp/cache-backup-$TIMESTAMP
+            echo "✅ Found deployment package:"
+            ls -lh /tmp/laravel-deploy.tar.gz
+            echo "==================================="
+            
+            # Step 2: Navigate to application directory
+            echo "📁 Step 2: Preparing application directory..."
+            if [ ! -d /var/www/laravel ]; then
+              echo "Creating application directory..."
+              sudo mkdir -p /var/www/laravel
             fi
-
-            # ----------------------------------------------------------
-            # Step 4: Extract new release
-            # ----------------------------------------------------------
-            echo "📦 Step 4: Extracting new release..."
-            sudo mkdir -p "$APP_DIR"
-
-            # Remove old files but leave .env in place
-            sudo find "$APP_DIR" \
-              -not -path "$APP_DIR" \
-              -not -path "$APP_DIR/.env" \
-              -delete 2>/dev/null || true
-
-            sudo tar -xzf /tmp/laravel-deploy.tar.gz \
-              -C "$APP_DIR" --overwrite --no-same-owner
-            rm -f /tmp/laravel-deploy.tar.gz
-
-            # Restore persistent directories
-            [ -d /tmp/storage-backup-$TIMESTAMP ] \
-              && sudo rm -rf "$APP_DIR/storage" \
-              && sudo mv /tmp/storage-backup-$TIMESTAMP "$APP_DIR/storage"
-
-            [ -d /tmp/cache-backup-$TIMESTAMP ] \
-              && sudo rm -rf "$APP_DIR/bootstrap/cache" \
-              && sudo mv /tmp/cache-backup-$TIMESTAMP "$APP_DIR/bootstrap/cache"
-
-            echo "✅ Extraction complete"
-
-            # ----------------------------------------------------------
-            # Step 5: Restore / create .env
-            # ----------------------------------------------------------
-            echo "🔧 Step 5: Restoring .env..."
-            if [ -f /tmp/laravel-env-backup-$TIMESTAMP ]; then
-              cp /tmp/laravel-env-backup-$TIMESTAMP "$APP_DIR/.env"
-              rm -f /tmp/laravel-env-backup-$TIMESTAMP
-              echo "✅ .env restored from backup"
-            elif [ ! -f "$APP_DIR/.env" ]; then
-              cp "$APP_DIR/.env.example" "$APP_DIR/.env" 2>/dev/null \
-                || echo "APP_KEY=" > "$APP_DIR/.env"
-              echo "⚠️  No backup found — created fresh .env"
+            cd /var/www/laravel
+            echo "Current directory: $(pwd)"
+            echo "==================================="
+            
+            # Step 3: Put application in maintenance mode
+            echo "🚧 Step 3: Putting application in maintenance mode..."
+            if [ -f artisan ]; then
+              php artisan down --retry=60 || echo "Maintenance mode failed, continuing..."
+            else
+              echo "Artisan not found, skipping maintenance mode"
             fi
-
-            # ----------------------------------------------------------
-            # Step 6: Inject secrets into .env
-            #   All values come from decoded env vars — no literals in script
-            # ----------------------------------------------------------
-            echo "☁️  Step 6: Injecting secrets into .env..."
-            cd "$APP_DIR"
-
-            for KEY in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_DEFAULT_REGION \
-                       AWS_BUCKET AWS_USE_PATH_STYLE_ENDPOINT DB_PASSWORD; do
-              sed -i "/^${KEY}=/d" .env
-            done
-
-            # Append using printf so values with special chars are written verbatim
-            {
-              printf 'AWS_ACCESS_KEY_ID=%s\n'        "$AWS_ACCESS_KEY_ID"
-              printf 'AWS_SECRET_ACCESS_KEY=%s\n'    "$AWS_SECRET_ACCESS_KEY"
-              printf 'AWS_DEFAULT_REGION=%s\n'       "ap-southeast-1"
-              printf 'AWS_BUCKET=%s\n'               "laravel-cloud-storage-hotel-1234"
-              printf 'AWS_USE_PATH_STYLE_ENDPOINT=%s\n' "false"
-              printf 'DB_PASSWORD=%s\n'              "$DB_PASSWORD"
-            } >> .env
-
-            echo "✅ Secrets injected"
-            echo "   AWS_ACCESS_KEY_ID  : $(grep '^AWS_ACCESS_KEY_ID=' .env | cut -c1-24)..."
-            echo "   AWS_DEFAULT_REGION : $(grep '^AWS_DEFAULT_REGION=' .env | cut -d= -f2)"
-
-            # ----------------------------------------------------------
-            # Step 7: Composer dependencies
-            # ----------------------------------------------------------
+            echo "==================================="
+            
+            # Step 4: Backup .env file if it exists
+            echo "💾 Step 4: Backing up configuration..."
+            if [ -f .env ]; then
+              cp .env .env.backup
+              echo "✅ .env file backed up"
+            fi
+            echo "==================================="
+            
+            # Step 5: Extract new files while preserving storage
+            echo "📦 Step 5: Extracting new files while preserving storage..."
+            
+            # Create a timestamp for backup
+            TIMESTAMP=$(date +%s)
+            
+            # Backup storage directory if it exists and has files
+            if [ -d storage ] && [ "$(ls -A storage 2>/dev/null)" ]; then
+              echo "Backing up storage directory..."
+              sudo mv storage /tmp/storage-backup-$TIMESTAMP
+              BACKUP_CREATED=true
+            else
+              BACKUP_CREATED=false
+            fi
+            
+            # Backup bootstrap/cache if it exists and has files (except .gitignore)
+            if [ -d bootstrap/cache ] && [ "$(ls -A bootstrap/cache 2>/dev/null | grep -v ".gitignore")" ]; then
+              echo "Backing up bootstrap/cache directory..."
+              sudo mv bootstrap/cache /tmp/cache-backup-$TIMESTAMP
+              CACHE_BACKUP_CREATED=true
+            else
+              CACHE_BACKUP_CREATED=false
+            fi
+            
+            # Remove all other files (with sudo)
+            echo "Cleaning up old files..."
+            sudo find . -not -path "./.env" -not -path "./.env.backup" -delete 2>/dev/null || true
+            
+            # Extract the new package with sudo
+            echo "Extracting new files with sudo..."
+            sudo tar -xzf /tmp/laravel-deploy.tar.gz -C /var/www/laravel --overwrite --no-same-owner
+            
+            # Restore storage if it was backed up
+            if [ "$BACKUP_CREATED" = true ] && [ -d /tmp/storage-backup-$TIMESTAMP ]; then
+              echo "Restoring original storage directory..."
+              sudo rm -rf storage 2>/dev/null || true
+              sudo mv /tmp/storage-backup-$TIMESTAMP storage
+            fi
+            
+            # Restore bootstrap/cache if it was backed up
+            if [ "$CACHE_BACKUP_CREATED" = true ] && [ -d /tmp/cache-backup-$TIMESTAMP ]; then
+              echo "Restoring original bootstrap/cache directory..."
+              sudo rm -rf bootstrap/cache 2>/dev/null || true
+              sudo mv /tmp/cache-backup-$TIMESTAMP bootstrap/cache
+            fi
+            
+            # Fix ownership immediately after extraction
+            echo "Fixing permissions..."
+            sudo chown -R $USER:www-data /var/www/laravel
+            sudo chmod -R 755 /var/www/laravel
+            sudo chmod -R 775 /var/www/laravel/storage /var/www/laravel/bootstrap/cache
+            
+            echo "✅ Extraction complete with storage preserved"
+            echo "Files extracted:"
+            ls -la /var/www/laravel | head -10
+            echo "==================================="
+            
+            # Step 6: Restore .env file
+            echo "🔧 Step 6: Restoring configuration..."
+            if [ -f .env.backup ] && [ ! -f .env ]; then
+              mv .env.backup .env
+              echo "✅ .env file restored"
+            elif [ ! -f .env ]; then
+              echo "⚠️ No .env file found, creating from example..."
+              cp .env.example .env 2>/dev/null || echo "APP_KEY=" > .env
+            fi
+            echo "==================================="
+            
+            # Step 7: Install Composer dependencies
             echo "📦 Step 7: Installing Composer dependencies..."
-            composer install --no-dev --optimize-autoloader --no-interaction
-
-            # Ensure S3 Flysystem driver is present
-            composer show league/flysystem-aws-s3-v3 --quiet 2>/dev/null \
-              || composer require league/flysystem-aws-s3-v3 "^3.0" --no-interaction
-            echo "✅ Composer ready"
-
-            # ----------------------------------------------------------
-            # Step 8: Frontend assets (built in CI, but rebuild if missing)
-            # ----------------------------------------------------------
-            echo "🎨 Step 8: Verifying / building frontend assets..."
-            if [ ! -f public/build/manifest.json ]; then
-              echo "manifest.json missing — building now..."
-
-              command -v npm &>/dev/null || {
+            if [ -f composer.json ]; then
+              composer install --no-dev --optimize-autoloader --no-interaction
+              echo "✅ Composer dependencies installed"
+            else
+              echo "⚠️ composer.json not found"
+            fi
+            echo "==================================="
+            
+            # Step 8: Build frontend assets (CRITICAL FIX FOR VITE MANIFEST)
+            echo "🎨 Step 8: Building frontend assets..."
+            if [ -f package.json ]; then
+              echo "Installing NPM dependencies..."
+              # Check if npm is installed
+              if ! command -v npm &> /dev/null; then
+                echo "⚠️ npm not found, installing Node.js..."
                 curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
                 sudo apt-get install -y nodejs
-              }
-
-              npm ci --no-audit --no-fund
-              npm run build
+              fi
+              
+              # Install dependencies and build
+              npm ci --no-audit --no-fund || npm install --no-audit --no-fund
+              
+              echo "Building assets..."
+              npm run build || npm run production
+              
+              # Verify the build was successful
+              if [ -f public/build/manifest.json ]; then
+                echo "✅ Vite manifest found at public/build/manifest.json"
+                echo "Manifest contents:"
+                cat public/build/manifest.json | head -10
+              else
+                echo "⚠️ Vite manifest not found, checking directory..."
+                if [ -d public/build ]; then
+                  echo "Build directory exists but manifest.json is missing:"
+                  ls -la public/build/
+                else
+                  echo "❌ public/build directory does not exist!"
+                  mkdir -p public/build
+                fi
+              fi
+              
+              # Set proper permissions
+              sudo chown -R $USER:www-data public/build
+              sudo chmod -R 755 public/build
+              
+              echo "✅ Frontend assets built successfully"
+            else
+              echo "⚠️ package.json not found, skipping asset build"
             fi
-
-            # Final fallback manifest
-            if [ ! -f public/build/manifest.json ]; then
-              echo "⚠️  Creating fallback manifest..."
-              mkdir -p public/build
-              cat > public/build/manifest.json <<'MANIFEST'
-              {
-                "resources/js/app.js":   { "file": "assets/app.js",  "isEntry": true, "src": "resources/js/app.js" },
-                "resources/css/app.css": { "file": "assets/app.css", "src": "resources/css/app.css" }
-              }
-              MANIFEST
-            fi
-            echo "✅ Frontend assets ready"
-
-            # ----------------------------------------------------------
-            # Step 9: App key
-            # ----------------------------------------------------------
+            echo "==================================="
+            
+            # Step 9: Generate application key
             echo "🔑 Step 9: Checking application key..."
-            APP_KEY_VAL=$(grep '^APP_KEY=' .env | cut -d= -f2-)
-            [ -z "$APP_KEY_VAL" ] && php artisan key:generate --force && echo "✅ Key generated" \
-              || echo "✅ Key already present"
-
-            # ----------------------------------------------------------
-            # Step 10: Database migrations
-            # ----------------------------------------------------------
-            echo "🗄️  Step 10: Running migrations..."
-            php artisan migrate --force || echo "⚠️  Migrations failed — check manually"
-
-            # ----------------------------------------------------------
-            # Step 11: Cache config, routes, views
-            # ----------------------------------------------------------
-            echo "⚙️  Step 11: Caching Laravel config..."
-            php artisan config:clear
-            php artisan config:cache
-            php artisan route:cache  || true
-            php artisan view:cache
-            echo "✅ Cache rebuilt"
-
-            # ----------------------------------------------------------
-            # Step 12: Storage link
-            # ----------------------------------------------------------
-            echo "🔗 Step 12: Linking storage..."
-            rm -rf public/storage
-            php artisan storage:link || true
-
-            # ----------------------------------------------------------
-            # Step 13: Permissions
-            # ----------------------------------------------------------
-            echo "🔒 Step 13: Setting permissions..."
-            sudo chown -R "$USER":www-data "$APP_DIR"
-            sudo chmod -R 755 "$APP_DIR"
-            sudo chmod -R 775 "$APP_DIR/storage" "$APP_DIR/bootstrap/cache"
-            sudo chown -R www-data:www-data \
-              "$APP_DIR/storage" \
-              "$APP_DIR/bootstrap/cache" \
-              "$APP_DIR/public/build"
-            sudo chmod -R 755 "$APP_DIR/public/build"
-            echo "✅ Permissions set"
-
-            # ----------------------------------------------------------
-            # Step 14: Bring application online
-            # ----------------------------------------------------------
+            if [ -f artisan ]; then
+              if ! grep -q "^APP_KEY=" .env || [ -z "$(grep "^APP_KEY=" .env | cut -d '=' -f2)" ]; then
+                echo "Generating application key..."
+                php artisan key:generate --force
+              else
+                echo "✅ APP_KEY already exists"
+              fi
+            fi
+            echo "==================================="
+            
+            # Step 10: Run migrations
+            echo "🗄️ Step 10: Running database migrations..."
+            if [ -f artisan ]; then
+              php artisan migrate --force || echo "⚠️ Migrations failed, continuing..."
+            fi
+            echo "==================================="
+            
+            # Step 11: Optimize Laravel
+            echo "⚙️ Step 11: Optimizing Laravel..."
+            if [ -f artisan ]; then
+              php artisan optimize:clear
+              php artisan config:cache
+              php artisan route:cache || true
+              php artisan view:cache
+              echo "✅ Optimization complete"
+            fi
+            echo "==================================="
+            
+            # Step 12: Create storage link
+            echo "🔗 Step 12: Creating storage link..."
+            if [ -f artisan ]; then
+              # Remove existing link if it exists
+              rm -rf public/storage
+              php artisan storage:link || true
+            fi
+            echo "==================================="
+            
+            # Step 13: Final permissions
+            echo "🔒 Step 13: Setting final permissions..."
+            sudo chown -R www-data:www-data /var/www/laravel/storage /var/www/laravel/bootstrap/cache /var/www/laravel/public/build
+            sudo chmod -R 775 /var/www/laravel/storage /var/www/laravel/bootstrap/cache
+            sudo chmod -R 755 /var/www/laravel/public/build
+            echo "✅ Final permissions set"
+            echo "==================================="
+            
+            # Step 14: Fix maintenance mode file and bring application back up
             echo "🚀 Step 14: Bringing application online..."
-            [ -f storage/framework/down ] \
-              && sudo chmod 666 storage/framework/down 2>/dev/null || true
-
-            php artisan up || sudo php artisan up
-            echo "✅ Application is online"
-
-            # ----------------------------------------------------------
-            # Step 15: Clean up temporary backups
-            # ----------------------------------------------------------
+            
+            # Fix the maintenance mode file permission if it exists
+            if [ -f storage/framework/down ]; then
+              echo "Fixing maintenance file permissions..."
+              sudo chmod 666 storage/framework/down 2>/dev/null || true
+              sudo chown $USER:www-data storage/framework/down 2>/dev/null || true
+            fi
+            
+            # Try to bring app up normally
+            if php artisan up; then
+              echo "✅ Application brought online successfully"
+            else
+              echo "Trying with sudo..."
+              sudo php artisan up
+            fi
+            echo "==================================="
+            
+            # Step 15: Clean up
             echo "🧹 Step 15: Cleaning up..."
-            sudo rm -rf /tmp/storage-backup-* /tmp/cache-backup-* 2>/dev/null || true
-            echo "✅ Cleanup done"
-
+            rm -f /tmp/laravel-deploy.tar.gz
+            rm -f /var/www/laravel/.env.backup
+            # Remove any remaining backups
+            sudo rm -rf /tmp/storage-backup-* 2>/dev/null || true
+            sudo rm -rf /tmp/cache-backup-* 2>/dev/null || true
+            echo "✅ Cleanup complete"
             echo "==================================="
-            echo "✅ DEPLOYMENT COMPLETE — $(date)"
-            echo "==================================="
-
-            # Quick status summary
-            php artisan about --only=environment 2>/dev/null || true
-          ENDSSH
+            
+            echo "✅✅✅ DEPLOYMENT COMPLETED SUCCESSFULLY! ✅✅✅"
+            
+            # Final verification - check if manifest exists
+            echo ""
+            echo "📊 Final Verification:"
+            if [ -f public/build/manifest.json ]; then
+              echo "✅ Vite manifest exists at public/build/manifest.json"
+            else
+              echo "❌ Vite manifest NOT found - check asset build step"
+            fi
+            
+            # Show Laravel status
+            if [ -f artisan ]; then
+              echo ""
+              echo "📊 Application Status:"
+              php artisan about --only=environment
+            fi
+          '
 
       - name: 🏥 Health check
         run: |
-          echo "⏳ Waiting 15s for app to stabilise..."
+          echo "⏳ Waiting for application to be ready..."
           sleep 15
-
+          
+          # Try multiple times
           for i in {1..5}; do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-              --max-time 10 http://${{ secrets.EC2_HOST }} || echo "000")
-            if [[ "$STATUS" == "200" || "$STATUS" == "302" ]]; then
-              echo "✅ Health check passed (HTTP $STATUS)"
+            HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.EC2_HOST }} || echo "000")
+            if [ "$HTTP_STATUS" = "200" ] || [ "$HTTP_STATUS" = "302" ]; then
+              echo "✅ Health check passed! (HTTP $HTTP_STATUS)"
               exit 0
             fi
-            echo "Attempt $i/5 — HTTP $STATUS — retrying in 5s..."
+            echo "Attempt $i: HTTP $HTTP_STATUS - retrying in 5 seconds..."
             sleep 5
           done
-
-          echo "⚠️  Health check returned HTTP $STATUS after 5 attempts (non-fatal)"
+          
+          echo "⚠️ Health check returned HTTP $HTTP_STATUS after 5 attempts"
+          # Don't fail the build, just warn
 
       - name: 💬 Notify success
         if: success()
         run: |
-          echo "✅ DEPLOYMENT SUCCESSFUL"
-          echo "🌐 Live at: http://${{ secrets.EC2_HOST }}"
-          echo "🕐 Completed at: $(date)"
+          echo "✅✅✅ PRODUCTION DEPLOYMENT SUCCESSFUL! ✅✅✅"
+          echo "🌐 Application is live at: http://${{ secrets.EC2_HOST }}"
+          echo "🚀 Deployment completed at $(date)"
 
       - name: 💬 Notify failure
         if: failure()
         run: |
-          echo "❌ DEPLOYMENT FAILED — review the logs above"
+          echo "❌❌❌ DEPLOYMENT FAILED! ❌❌❌"
+          echo "Please check the logs above for details."
           echo ""
-          echo "Manual recovery steps:"
+          echo "🆘 Quick fixes to try manually on your EC2 instance:"
           echo "  ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}"
           echo "  cd /var/www/laravel"
-          echo "  composer require league/flysystem-aws-s3-v3 \"^3.0\""
-          echo "  php artisan config:clear && php artisan config:cache"
+          echo "  npm install && npm run build"
+          echo "  sudo chown -R www-data:www-data public/build"
+          echo "  php artisan optimize:clear"
           echo "  sudo php artisan up"
