@@ -171,7 +171,6 @@ jobs:
                     --exclude='tests' \
                     --exclude='.env' \
                     --exclude='.env.*' \
-                    --exclude='public/build' \
                     --exclude='storage/logs/*' \
                     --exclude='storage/framework/cache/*' \
                     --exclude='storage/framework/sessions/*' \
@@ -340,7 +339,7 @@ jobs:
             fi
             echo "==================================="
             
-            # Step 7: Install dependencies
+            # Step 7: Install Composer dependencies
             echo "📦 Step 7: Installing Composer dependencies..."
             if [ -f composer.json ]; then
               composer install --no-dev --optimize-autoloader --no-interaction
@@ -350,8 +349,51 @@ jobs:
             fi
             echo "==================================="
             
-            # Step 8: Generate application key
-            echo "🔑 Step 8: Checking application key..."
+            # Step 8: Build frontend assets (CRITICAL FIX FOR VITE MANIFEST)
+            echo "🎨 Step 8: Building frontend assets..."
+            if [ -f package.json ]; then
+              echo "Installing NPM dependencies..."
+              # Check if npm is installed
+              if ! command -v npm &> /dev/null; then
+                echo "⚠️ npm not found, installing Node.js..."
+                curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+                sudo apt-get install -y nodejs
+              fi
+              
+              # Install dependencies and build
+              npm ci --no-audit --no-fund || npm install --no-audit --no-fund
+              
+              echo "Building assets..."
+              npm run build || npm run production
+              
+              # Verify the build was successful
+              if [ -f public/build/manifest.json ]; then
+                echo "✅ Vite manifest found at public/build/manifest.json"
+                echo "Manifest contents:"
+                cat public/build/manifest.json | head -10
+              else
+                echo "⚠️ Vite manifest not found, checking directory..."
+                if [ -d public/build ]; then
+                  echo "Build directory exists but manifest.json is missing:"
+                  ls -la public/build/
+                else
+                  echo "❌ public/build directory does not exist!"
+                  mkdir -p public/build
+                fi
+              fi
+              
+              # Set proper permissions
+              sudo chown -R $USER:www-data public/build
+              sudo chmod -R 755 public/build
+              
+              echo "✅ Frontend assets built successfully"
+            else
+              echo "⚠️ package.json not found, skipping asset build"
+            fi
+            echo "==================================="
+            
+            # Step 9: Generate application key
+            echo "🔑 Step 9: Checking application key..."
             if [ -f artisan ]; then
               if ! grep -q "^APP_KEY=" .env || [ -z "$(grep "^APP_KEY=" .env | cut -d '=' -f2)" ]; then
                 echo "Generating application key..."
@@ -362,15 +404,15 @@ jobs:
             fi
             echo "==================================="
             
-            # Step 9: Run migrations
-            echo "🗄️ Step 9: Running database migrations..."
+            # Step 10: Run migrations
+            echo "🗄️ Step 10: Running database migrations..."
             if [ -f artisan ]; then
               php artisan migrate --force || echo "⚠️ Migrations failed, continuing..."
             fi
             echo "==================================="
             
-            # Step 10: Optimize Laravel
-            echo "⚙️ Step 10: Optimizing Laravel..."
+            # Step 11: Optimize Laravel
+            echo "⚙️ Step 11: Optimizing Laravel..."
             if [ -f artisan ]; then
               php artisan optimize:clear
               php artisan config:cache
@@ -380,8 +422,8 @@ jobs:
             fi
             echo "==================================="
             
-            # Step 11: Create storage link
-            echo "🔗 Step 11: Creating storage link..."
+            # Step 12: Create storage link
+            echo "🔗 Step 12: Creating storage link..."
             if [ -f artisan ]; then
               # Remove existing link if it exists
               rm -rf public/storage
@@ -389,15 +431,16 @@ jobs:
             fi
             echo "==================================="
             
-            # Step 12: Final permissions
-            echo "🔒 Step 12: Setting final permissions..."
-            sudo chown -R www-data:www-data /var/www/laravel/storage /var/www/laravel/bootstrap/cache
+            # Step 13: Final permissions
+            echo "🔒 Step 13: Setting final permissions..."
+            sudo chown -R www-data:www-data /var/www/laravel/storage /var/www/laravel/bootstrap/cache /var/www/laravel/public/build
             sudo chmod -R 775 /var/www/laravel/storage /var/www/laravel/bootstrap/cache
+            sudo chmod -R 755 /var/www/laravel/public/build
             echo "✅ Final permissions set"
             echo "==================================="
             
-            # Step 13: Fix maintenance mode file and bring application back up
-            echo "🚀 Step 13: Bringing application online..."
+            # Step 14: Fix maintenance mode file and bring application back up
+            echo "🚀 Step 14: Bringing application online..."
             
             # Fix the maintenance mode file permission if it exists
             if [ -f storage/framework/down ]; then
@@ -415,8 +458,8 @@ jobs:
             fi
             echo "==================================="
             
-            # Step 14: Clean up
-            echo "🧹 Step 14: Cleaning up..."
+            # Step 15: Clean up
+            echo "🧹 Step 15: Cleaning up..."
             rm -f /tmp/laravel-deploy.tar.gz
             rm -f /var/www/laravel/.env.backup
             # Remove any remaining backups
@@ -426,6 +469,15 @@ jobs:
             echo "==================================="
             
             echo "✅✅✅ DEPLOYMENT COMPLETED SUCCESSFULLY! ✅✅✅"
+            
+            # Final verification - check if manifest exists
+            echo ""
+            echo "📊 Final Verification:"
+            if [ -f public/build/manifest.json ]; then
+              echo "✅ Vite manifest exists at public/build/manifest.json"
+            else
+              echo "❌ Vite manifest NOT found - check asset build step"
+            fi
             
             # Show Laravel status
             if [ -f artisan ]; then
@@ -470,6 +522,7 @@ jobs:
           echo "🆘 Quick fixes to try manually on your EC2 instance:"
           echo "  ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}"
           echo "  cd /var/www/laravel"
-          echo "  sudo chown -R \$USER:www-data ."
-          echo "  sudo chmod -R 775 storage bootstrap/cache"
+          echo "  npm install && npm run build"
+          echo "  sudo chown -R www-data:www-data public/build"
+          echo "  php artisan optimize:clear"
           echo "  sudo php artisan up"
