@@ -357,10 +357,22 @@ jobs:
             echo "✅ Final permissions set"
             echo "==================================="
             
-            # Step 14: Bring application back up
+            # Step 14: Fix maintenance mode file and bring application back up
             echo "🚀 Step 14: Bringing application online..."
-            if [ -f artisan ]; then
-              php artisan up
+            
+            # Fix the maintenance mode file permission if it exists
+            if [ -f storage/framework/down ]; then
+              echo "Fixing maintenance file permissions..."
+              sudo chmod 666 storage/framework/down 2>/dev/null || true
+              sudo chown $USER:www-data storage/framework/down 2>/dev/null || true
+            fi
+            
+            # Try to bring app up normally
+            if php artisan up; then
+              echo "✅ Application brought online successfully"
+            else
+              echo "Trying with sudo..."
+              sudo php artisan up
             fi
             echo "==================================="
             
@@ -418,4 +430,4 @@ jobs:
           echo "  cd /var/www/laravel"
           echo "  sudo chown -R \$USER:www-data ."
           echo "  sudo chmod -R 775 storage bootstrap/cache"
-          echo "  php artisan up"
+          echo "  sudo php artisan up"
